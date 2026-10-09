@@ -218,3 +218,8 @@ test('kicked players are told and lose the seat; host can then fill it', () => {
   assert.ok(tr.of(C.playerId, 'table:kicked').length);
   assert.ok(tm.join(who('d', 'Dua'), code).ok);
 });
+
+test('default crypto rng produces values in [0, 1)', () => {
+  const m = new TableManager({ games: { thulla }, transport: fakeTransport() });
+  for (let i = 0; i < 1000; i++) { const v = m.rng(); assert.ok(v >= 0 && v < 1); }
+});
