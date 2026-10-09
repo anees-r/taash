@@ -238,3 +238,178 @@ test('host who left mid-game: hosting passes on at the end; departed players fre
   assert.deepStrictEqual(t.players.map(p => p.id).sort(), [A.playerId, B.playerId].sort());
   assert.ok(tm.start(tm.seatOf(t, t.hostId) && [A, B].find(p => p.playerId === t.hostId), code).ok);
 });
+
+test('table options: ranked + private by default; public tables with a free seat are listed', () => {
+  const { code } = tm.createTable(H, 'thulla', defaultSettings());
+  assert.deepStrictEqual(tm.get(code).options, { ranked: true, visibility: 'private' });
+  assert.strictEqual(tm.publicTables().length, 0);
+  const pub = tm.createTable(A, 'thulla', { ...defaultSettings(), players: 2 }, { visibility: 'public', ranked: false }).code;
+  assert.deepStrictEqual(tm.publicTables().map(t => [t.code, t.ranked, t.seated, t.seats]), [[pub, false, 1, 2]]);
+  tm.join(C, pub);
+  assert.strictEqual(tm.publicTables().length, 0, 'a full table is not listed');
+  // Only the host changes options, and only in the lobby.
+  assert.match(tm.updateSettings(C, pub, defaultSettings(), { visibility: 'private' }).error, /Only the host/);
+  assert.ok(tm.updateSettings(H, code, defaultSettings(), { visibility: 'public' }).ok);
+  assert.strictEqual(tm.get(code).options.visibility, 'public');
+  assert.strictEqual(tm.get(code).options.ranked, true, 'options not sent are kept');
+  assert.deepStrictEqual(tm.lobbyView(tm.get(code)).options, { ranked: true, visibility: 'public' });
+});
+
+test('leaving mid-game forfeits: the game goes on, the leaver ranks last, the result is saved as ranked', () => {
+  const code = seatAll();
+  tm.start(H, code);
+  mock.timers.tick(thulla.TIMING.dealMs);
+  const t = tm.get(code);
+  tm.leave(A, code);
+  assert.strictEqual(t.status, 'playing', 'three players are still in');
+  assert.ok(t.forfeits.has(A.playerId));
+  tm.finish(t);
+  const r = persisted[0];
+  assert.strictEqual(r.ranked, true);
+  const a = r.players.find(p => p.userId === 'a');
+  assert.ok(a.forfeit);
+  assert.strictEqual(a.place, 4);
+  assert.ok(r.players.filter(p => p.userId !== 'a').every(p => !p.forfeit && p.place < 4));
+});
+
+test('coming back before the game ends cancels the forfeit', () => {
+  const code = seatAll();
+  tm.start(H, code);
+  mock.timers.tick(thulla.TIMING.dealMs);
+  const t = tm.get(code);
+  tm.leave(A, code);
+  tm.attach(A, code);
+  tm.finish(t);
+  assert.ok(!persisted[0].players.find(p => p.userId === 'a').forfeit);
+});
+
+test('dropping off for good counts as leaving; a short blip does not', () => {
+  const code = seatAll();
+  tm.start(H, code);
+  mock.timers.tick(thulla.TIMING.dealMs);
+  const t = tm.get(code);
+  tm.detach(A, code);                       // gone for good
+  tm.detach(C, code);                       // a blip…
+  mock.timers.tick(LIMITS.dropForfeitMs - 1000);
+  tm.attach(C, code);                       // …back in time
+  mock.timers.tick(2000);
+  tm.finish(t);
+  const by = id => persisted[0].players.find(p => p.userId === id);
+  assert.ok(by('a').forfeit);
+  assert.ok(!by('c').forfeit);
+});
+
+test('when everyone leaves, the game ends and every leaver forfeits', () => {
+  const code = seatAll();
+  tm.start(H, code);
+  mock.timers.tick(thulla.TIMING.dealMs);
+  for (const p of [A, B, C, H]) tm.leave(p, code);
+  assert.strictEqual(persisted.length, 1);
+  assert.ok(persisted[0].players.every(p => p.forfeit));
+  assert.strictEqual(tm.get(code).lastResult.everyoneLeft, true);
+});
+
+test('a game nobody comes back to is ended with forfeits when the table closes', () => {
+  const code = seatAll();
+  tm.start(H, code);
+  mock.timers.tick(thulla.TIMING.dealMs);
+  for (const p of [H, A, B, C]) tm.detach(p, code);
+  mock.timers.tick(LIMITS.abandonMs);
+  assert.strictEqual(tm.get(code), null);
+  assert.strictEqual(persisted.length, 1);
+  assert.ok(persisted[0].players.every(p => p.forfeit));
+});
+
+test('when only one player is left holding cards, the game ends early in their favour after a grace period', () => {
+  const code = seatAll({ ...defaultSettings(), players: 2 }, [A]);
+  tm.start(H, code);
+  mock.timers.tick(thulla.TIMING.dealMs);
+  tm.leave(A, code);
+  const t = tm.get(code);
+  assert.strictEqual(t.status, 'playing');
+  assert.ok(t.paused, 'the clock stops while waiting');
+  mock.timers.tick(LIMITS.endGraceMs);
+  assert.strictEqual(t.status, 'finished');
+  assert.strictEqual(t.lastResult.endedEarly, true);
+  assert.strictEqual(t.lastResult.loser, null);
+  const r = persisted[0];
+  assert.deepStrictEqual(r.players.map(p => [p.userId, p.place, p.forfeit]).sort(), [['a', 2, true], ['host', 1, false]]);
+});
+
+test('unranked tables save results with ranked: false', () => {
+  const { code } = tm.createTable(H, 'thulla', { ...defaultSettings(), players: 2 }, { ranked: false });
+  tm.attach(H, code); tm.join(A, code); tm.attach(A, code); tm.setReady(A, code, true);
+  tm.start(H, code);
+  mock.timers.tick(thulla.TIMING.dealMs);
+  tm.finish(tm.get(code));
+  assert.strictEqual(persisted[0].ranked, false);
+  assert.strictEqual(tm.get(code).lastResult.ranked, false);
+});
+
+test('the last player leaving during the grace period forfeits too', () => {
+  const code = seatAll({ ...defaultSettings(), players: 2 }, [A]);
+  tm.start(H, code);
+  mock.timers.tick(thulla.TIMING.dealMs);
+  tm.leave(A, code);
+  mock.timers.tick(LIMITS.endGraceMs / 2);
+  tm.leave(H, code);
+  mock.timers.tick(LIMITS.endGraceMs);
+  assert.strictEqual(persisted.length, 1, 'saved once, not again when the grace timer fires');
+  assert.ok(persisted[0].players.every(p => p.forfeit));
+});
+
+test('a leaver returning during the grace period resumes the game', () => {
+  const code = seatAll({ ...defaultSettings(), players: 2 }, [A]);
+  tm.start(H, code);
+  mock.timers.tick(thulla.TIMING.dealMs);
+  tm.leave(A, code);
+  tm.attach(A, code);
+  mock.timers.tick(LIMITS.endGraceMs);
+  const t = tm.get(code);
+  assert.strictEqual(t.status, 'playing');
+  assert.ok(!t.paused);
+});
+
+test('bots: unranked tables only; they cannot make a table ranked; kicking removes them', () => {
+  const { code } = tm.createTable(H, 'thulla', { ...defaultSettings(), players: 4 });
+  tm.attach(H, code);
+  assert.match(tm.addBot(H, code).error, /unranked/);
+  assert.ok(tm.updateSettings(H, code, defaultSettings(), { ranked: false }).ok);
+  assert.match(tm.addBot(A, code).error, /not seated|Only the host/);
+  const b1 = tm.addBot(H, code), b2 = tm.addBot(H, code);
+  assert.ok(b1.ok && b2.ok && b1.playerId !== b2.playerId);
+  assert.ok(tm.get(code).players.find(p => p.id === b1.playerId).ready);
+  assert.match(tm.updateSettings(H, code, defaultSettings(), { ranked: true }).error, /Bots only play at unranked/);
+  assert.ok(tm.kick(H, code, b1.playerId).ok);
+  assert.strictEqual(tm.get(code).players.filter(p => p.bot).length, 1);
+});
+
+test('a game with bots plays itself to the end; bots never forfeit', () => {
+  const { code } = tm.createTable(H, 'thulla', { ...defaultSettings(), players: 4, turnSeconds: 5, pileSeconds: 1 }, { ranked: false });
+  tm.attach(H, code);
+  for (let i = 0; i < 3; i++) assert.ok(tm.addBot(H, code).ok);
+  assert.ok(tm.start(H, code).ok);
+  const t = tm.get(code);
+  for (let i = 0; i < 4000 && t.status === 'playing'; i++) mock.timers.tick(1000);
+  assert.strictEqual(t.status, 'finished');
+  assert.strictEqual(persisted.length, 1);
+  assert.strictEqual(persisted[0].ranked, false);
+  assert.ok(persisted[0].players.every(p => !p.forfeit));
+});
+
+test('bots answer a hello in chat', () => {
+  const { code } = tm.createTable(H, 'thulla', defaultSettings(), { ranked: false });
+  tm.attach(H, code);
+  tm.addBot(H, code);
+  tm.chat(H, code, 'Salam everyone');
+  mock.timers.tick(2000);
+  assert.ok(tm.get(code).chat.some(m => m.bot));
+});
+
+test('the host leaving a table of bots closes it', () => {
+  const { code } = tm.createTable(H, 'thulla', defaultSettings(), { ranked: false });
+  tm.attach(H, code);
+  tm.addBot(H, code);
+  tm.leave(H, code);
+  assert.strictEqual(tm.get(code), null);
+});

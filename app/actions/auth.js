@@ -25,14 +25,15 @@ async function clientKey() {
 
 const nameSchema = z.string().trim().min(1, 'Enter a display name.').max(24, 'Keep it to 24 characters.')
   .regex(/^[^<>\u0000-\u001F]+$/, 'Use letters, numbers and spaces.');
-const handleSchema = z.string().trim().toLowerCase().min(3, 'Handles need at least 3 characters.').max(20, 'Keep it to 20 characters.')
+const handleSchema = z.string().trim().toLowerCase().min(3, 'Usernames need at least 3 characters.').max(20, 'Keep it to 20 characters.')
   .regex(/^[a-z0-9._]+$/, 'Use letters, numbers, dots or underscores.');
 const registerSchema = z.object({
   name: nameSchema,
   handle: handleSchema,
   email: z.string().trim().toLowerCase().email('Enter a valid email address.').max(200),
   password: z.string().min(8, 'Use at least 8 characters.').max(200),
-});
+  confirm: z.string(),
+}).refine(d => d.password === d.confirm, { message: 'Passwords don’t match.', path: ['confirm'] });
 
 function safeNext(v) { return typeof v === 'string' && v.startsWith('/') && !v.startsWith('//') ? v : '/'; }
 
@@ -51,7 +52,7 @@ export async function registerAction(_prev, formData) {
     return { error: 'That email or handle was just taken. Try another.', values };
   }
   try {
-    await signIn('credentials', { email, password, redirectTo: safeNext(formData.get('next')) });
+    await signIn('credentials', { login: email, password, redirectTo: safeNext(formData.get('next')) });
   } catch (e) {
     if (e instanceof AuthError) return { error: 'Account created, but signing in failed. Try signing in.', values };
     throw e;   // redirect
@@ -60,11 +61,11 @@ export async function registerAction(_prev, formData) {
 
 export async function signInAction(_prev, formData) {
   if (!limitAuth('in:' + await clientKey())) return { error: 'Too many attempts. Wait a minute and try again.' };
-  const email = String(formData.get('email') || '');
+  const login = String(formData.get('login') || '');
   try {
-    await signIn('credentials', { email, password: String(formData.get('password') || ''), redirectTo: safeNext(formData.get('next')) });
+    await signIn('credentials', { login, password: String(formData.get('password') || ''), redirectTo: safeNext(formData.get('next')) });
   } catch (e) {
-    if (e instanceof AuthError) return { error: 'That email and password do not match an account.', values: { email } };
+    if (e instanceof AuthError) return { error: 'Those sign-in details do not match an account.', values: { login } };
     throw e;
   }
 }
@@ -82,14 +83,39 @@ export async function signOutEverywhereAction() {
   await signOut({ redirectTo: '/signin' });
 }
 
+const limitHandleCheck = g.__taashHandleLimiter || (g.__taashHandleLimiter = createLimiter({ capacity: 30, perSecond: 2 }));
+
+/** Is this username free? (Ignores the signed-in user's own.) For live feedback while typing. */
+export async function checkHandleAction(raw) {
+  if (!limitHandleCheck('h:' + await clientKey())) return { ok: false, error: 'Slow down a little.' };
+  const parsed = handleSchema.safeParse(raw);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
+  const me = await requireUser();
+  const [row] = await db.select({ id: users.id }).from(users).where(dsql`lower(${users.handle}) = ${parsed.data}`).limit(1);
+  return { ok: true, handle: parsed.data, available: !row || row.id === me?.userId };
+}
+
 export async function updateProfileAction(_prev, formData) {
   const me = await requireUser();
   if (!me) return { error: 'Sign in to edit your profile.' };
   const parsed = nameSchema.safeParse(formData.get('name'));
-  if (!parsed.success) return { error: parsed.error.issues[0].message };
-  await db.update(users).set({ name: parsed.data }).where(eq(users.id, me.userId));   // only ever the signed-in user's row
+  if (!parsed.success) return { error: parsed.error.issues[0].message, field: 'name' };
+  const patch = { name: parsed.data };
+  const rawHandle = formData.get('handle');
+  if (rawHandle != null && String(rawHandle).trim().replace(/^@/, '').toLowerCase() !== String(me.handle || '').toLowerCase()) {
+    const h = handleSchema.safeParse(String(rawHandle).trim().replace(/^@/, ''));
+    if (!h.success) return { error: h.error.issues[0].message, field: 'handle' };
+    const [taken] = await db.select({ id: users.id }).from(users).where(dsql`lower(${users.handle}) = ${h.data} and ${users.id} <> ${me.userId}`).limit(1);
+    if (taken) return { error: 'That username is taken. Try another.', field: 'handle' };
+    patch.handle = h.data;
+  }
+  try {
+    await db.update(users).set(patch).where(eq(users.id, me.userId));   // only ever the signed-in user's row
+  } catch {
+    return { error: 'That username was just taken. Try another.', field: 'handle' };   // unique index race
+  }
   invalidateUser(me.userId);
-  return { ok: true, name: parsed.data };
+  return { ok: true, name: patch.name, handle: patch.handle || me.handle };
 }
 
 export async function changePasswordAction(_prev, formData) {

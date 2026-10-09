@@ -6,7 +6,8 @@ import { JoinForm } from '@/components/platform/JoinForm';
 import { UseCodeButton } from '@/components/platform/UseCodeButton';
 import { getViewer } from '@/lib/auth/viewer';
 import { friendIds } from '@/lib/db/social';
-import { openTablesOf } from '@/lib/server/live';
+import { openTablesOf, publicTables } from '@/lib/server/live';
+import { OpenRooms } from '@/components/platform/OpenRooms';
 import { firstName } from '@/lib/client/format';
 
 export const dynamic = 'force-dynamic';
@@ -34,6 +35,7 @@ export default async function JoinPage({ searchParams }) {
                 </li>
               ))}</ul>
             ) : <Note>{viewer.kind === 'user' ? 'None of your friends are hosting an open table right now.' : 'Sign in to see tables your friends are hosting.'}</Note>}
+            <OpenRooms initial={publicTables()} compact />
           </aside>
         </div>
       </main>

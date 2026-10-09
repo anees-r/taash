@@ -11,6 +11,7 @@ async function register(page, name, handle) {
   await page.fill('#handle', handle);
   await page.fill('#email', handle + '@example.test');
   await page.fill('#password', 'correct horse battery');
+  await page.fill('#confirm', 'correct horse battery');
   await page.click('button[type=submit]');
   await page.waitForURL(u => !u.pathname.startsWith('/register'));
 }
@@ -85,8 +86,8 @@ test('friends: request, accept, both see each other; sign out ends the session',
 test('wrong password is rejected without saying which part was wrong', async ({ browser }) => {
   const p = await newPage(browser);
   await p.goto('/signin');
-  await p.fill('#email', 'nobody@example.test');
+  await p.fill('#login', 'nobody@example.test');
   await p.fill('#password', 'whatever-123');
   await p.click('button[type=submit]');
-  await expect(p.getByText('That email and password do not match an account.')).toBeVisible();
+  await expect(p.getByText('Those sign-in details do not match an account.')).toBeVisible();
 });

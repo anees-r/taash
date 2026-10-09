@@ -11,7 +11,7 @@ import { Modal } from '@/components/platform/Modal';
 import { Guide } from './Guide';
 import { mountThullaTable } from './table-view';
 
-export function ThullaTableView({ code, game, settings, seq, now, chat, you, controllerRef, onAction, onLeave, onGameOver, onResync }) {
+export function ThullaTableView({ code, game, settings, chat, you, controllerRef, onAction, onLeave, onGameOver, onResync }) {
   const hostRef = useRef(null);
   const [chatHost, setChatHost] = useState(null);
   const [rules, setRules] = useState(false);
@@ -23,7 +23,7 @@ export function ThullaTableView({ code, game, settings, seq, now, chat, you, con
   useEffect(() => {
     const c = mountThullaTable(hostRef.current, {
       code, seats: game.seats, me: game.you, settings,
-      snapshot: { view: game.view, hand: game.hand, seq, now },
+      snapshot: { view: game.view, hand: game.hand, seq: game.seq, now: game.now },
       hooks: {
         send: a => hooks.current.onAction(a),
         leave: () => hooks.current.onLeave(),

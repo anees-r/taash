@@ -409,6 +409,7 @@ function finishPlayer(state, seat) {
   p.finished = true;
   state.finishOrder.push(seat);
   p.place = state.finishOrder.length;
+  p.stats.finishedBaari = state.baari ? state.baari.number : null;   // ratings reward finishing early
   log(state, { type: 'finish', seat, place: p.place });
 }
 

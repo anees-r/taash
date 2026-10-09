@@ -90,9 +90,29 @@ export function mountThullaTable(container, o) {
   const felt = h('div.tt-felt', h('div.felt-inlay'), center);
   const seatLayer = h('div.seat-layer');
   const cleared = settings.showCleared ? clearedPanel() : null;
-  const stage = h('div.tt-stage', felt, seatLayer, cleared ? cleared.el : null);
+  // Wide screens: a running log beside the round table (who played what, the last baari, the order).
+  const side = h('aside.tt-side', { 'aria-label': 'Baari log' });
+  const stage = h('div.tt-stage', felt, seatLayer, cleared ? cleared.el : null, side);
 
   const handEl = h('div.hand', { role: 'listbox', 'aria-label': 'Your hand', 'aria-orientation': 'horizontal' });
+  // Shown only when the hand is wider than the dock: arrows that scroll, with a count of hidden cards.
+  const moreNum = () => h('span.hm-num.num');
+  const moreL = h('button.hand-more.hm-left', { type: 'button', hidden: true, tabIndex: -1 }, icon('i-back'), moreNum());
+  const moreR = h('button.hand-more.hm-right', { type: 'button', hidden: true, tabIndex: -1 }, moreNum(), icon('i-back'));
+  const handWrap = h('div.hand-wrap', handEl, moreL, moreR);
+  moreL.addEventListener('click', () => handEl.scrollBy({ left: -handEl.clientWidth * .7, behavior: reducedMotion() ? 'auto' : 'smooth' }));
+  moreR.addEventListener('click', () => handEl.scrollBy({ left: handEl.clientWidth * .7, behavior: reducedMotion() ? 'auto' : 'smooth' }));
+  let scrollRaf = 0;
+  handEl.addEventListener('scroll', () => { if (!scrollRaf) scrollRaf = requestAnimationFrame(() => { scrollRaf = 0; updateHandScroll(); }); }, { passive: true });
+  // Cards per shape; tapping one brings that shape into view.
+  const tallyEls = {};
+  const tally = h('div.suit-tally', { role: 'group', 'aria-label': 'Cards in your hand by shape' }, SUIT_ORDER.map(s => {
+    const num = h('b.num', '0');
+    const b = h('button.st-suit' + (RED[s] ? '.red' : ''), { type: 'button', 'data-suit': s }, suitSvg(s), num);
+    b.addEventListener('click', () => showSuit(s));
+    tallyEls[s] = { b, num };
+    return b;
+  }));
   const hintEl = h('p.hand-hint', { 'aria-live': 'polite' });
   const timerFill = h('span.tbar-fill');
   const timerText = h('span.num', '');
@@ -107,8 +127,8 @@ export function mountThullaTable(container, o) {
     h('div.dock-top',
       h('div.me', avatar({ name: seatsMeta[me]?.name || '?', guest: seatsMeta[me]?.guest }, 'sm'), h('div.me-text', h('b', 'You'), meStatus), meCount),
       hintEl, backBtn, timerPill),
-    handEl,
-    h('div.dock-actions', sortSeg, h('div.dock-main', reqBtn, playBtn)));
+    handWrap,
+    h('div.dock-actions', sortSeg, tally, h('div.dock-main', reqBtn, playBtn)));
   playBtn.addEventListener('click', () => { if (selected) humanPlay(selected); });
   reqBtn.addEventListener('click', humanRequest);
   backBtn.addEventListener('click', () => sendAction({ type: 'back' }));
@@ -136,7 +156,7 @@ export function mountThullaTable(container, o) {
     const el = h('div.seat' + (i === me ? '.is-me' : ''), { 'data-seat': i },
       h('div.seat-av', ring.svg, avatar(p, null), p.isHost ? h('span.host-crown', { title: 'Host' }, icon('i-crown')) : null),
       h('div.seat-info',
-        h('div.seat-name', h('b', i === me ? 'You' : p.name.split(' ')[0]), p.guest ? h('span.guest-tag', 'guest') : null),
+        h('div.seat-name', h('b', i === me ? 'You' : p.name.split(' ')[0]), p.bot ? h('span.guest-tag.bot', 'bot') : p.guest ? h('span.guest-tag', 'guest') : null),
         h('div.seat-meta', h('span.seat-count.num', { title: 'Cards in hand' }, h('span.mini-back'), h('span.cnum', '0')), h('span.seat-status'))),
       h('div.seat-bubble', { hidden: true }));
     el.ring = ring;
@@ -148,11 +168,11 @@ export function mountThullaTable(container, o) {
   function layoutSeats() {
     const narrow = stage.clientWidth < 620;
     const W = stage.clientWidth, Hh = stage.clientHeight;
+    // The table is a circle (CSS); seats sit just outside its rail.
+    const R = felt.offsetWidth / 2;
     seatsMeta.forEach((p, i) => {
       const a = seatAngle(i);
-      const rx = narrow ? 41 : 44, ry = narrow ? 42 : 41;
-      let x = 50 + rx * Math.cos(a), y = 50 + ry * Math.sin(a);
-      if (i === me) { x = 50; y = 93; }
+      const x = 50 + (R * (narrow ? 1.08 : 1.14) * Math.cos(a)) / W * 100, y = 50 + (R * 1.12 * Math.sin(a)) / Hh * 100;
       const el = seatEls[i];
       // Keep every seat fully inside the stage, whatever the screen size.
       const hw = el.offsetWidth / 2 + 6, hh = el.offsetHeight / 2 + 4;
@@ -161,8 +181,8 @@ export function mountThullaTable(container, o) {
       el.classList.toggle('side-l', x < 30); el.classList.toggle('side-r', x > 70); el.classList.toggle('side-t', y < 30);
     });
   }
-  const ro = new ResizeObserver(() => { layoutSeats(); fitHand(); });
-  ro.observe(stage); ro.observe(handEl);
+  const ro = new ResizeObserver(() => { layoutSeats(); fitHand(); renderSide(); });
+  ro.observe(stage); ro.observe(handWrap);
 
   function svgRing() {
     const NS = 'http://www.w3.org/2000/svg';
@@ -223,11 +243,51 @@ export function mountThullaTable(container, o) {
       meStatus.className = 'me-status st-' + st.cls; meStatus.textContent = st.text;
       backBtn.hidden = !seatInfo(me).away || seatInfo(me).finished || V.phase === 'over';
     }
+    renderSide();
     baariChip.textContent = V.phase === 'over' ? 'Game over' : V.phase === 'deal' ? 'Dealing' : 'Baari ' + (V.baari ? V.baari.number : 1);
     updateTurnLine();
   }
 
   const nameOf = i => (i === me ? 'You' : seatsMeta[i].name.split(' ')[0]);
+
+  /* ------------------------------------------------------------ side log (wide screens) */
+  function renderSide() {
+    if (!V || !side.offsetParent) return;                    // hidden on smaller screens
+    const b = V.baari;
+    const review = V.phase === 'review' ? V.review : null;
+    const playRow = (p, opts = {}) => h('li.ts-play' + (p.thulla ? '.is-thulla' : '') + (opts.top ? '.is-top' : ''),
+      avatar(seatsMeta[p.seat], 'sm'),
+      h('span.ts-name', nameOf(p.seat)),
+      p.thulla ? h('span.ts-tag.ember', 'Thulla') : opts.top ? h('span.ts-tag', 'Highest') : null,
+      renderCard(p.card, { size: 30, mini: true }));
+    const blocks = [];
+    if (V.phase === 'deal') blocks.push(h('section.ts-block', h('header', h('span.eyebrow', 'Dealing')), h('p.faint.small', 'Cards go out anti-clockwise, one at a time.')));
+    else if (b) {
+      const waiting = V.phase === 'turn' && V.current != null
+        ? (b.plays.length ? 'Waiting for ' + nameOf(V.current) + '…' : (V.current === me ? 'Your lead.' : nameOf(V.current) + ' to lead.'))
+        : null;
+      blocks.push(h('section.ts-block',
+        h('header', h('span.eyebrow', 'Baari ' + b.number), b.leadSuit ? h('span.lc-suit.ts-suit' + (RED[b.leadSuit] ? '.red' : ''), suitSvg(b.leadSuit), SUIT_NAMES[b.leadSuit]) : null),
+        b.plays.length ? h('ol.ts-plays', b.plays.map(p => playRow(p, { top: review && review.highest && review.highest.seat === p.seat }))) : null,
+        waiting ? h('p.faint.small', waiting) : null));
+    }
+    const prev = b ? history.slice().reverse().find(x => x.number < b.number) : history[history.length - 1];
+    if (prev) {
+      blocks.push(h('section.ts-block.ts-prev',
+        h('header', h('span.eyebrow', 'Baari ' + prev.number), h('span.chip' + (prev.kind === 'thulla' ? '.chip-ember' : '.chip-mist'), prev.kind === 'thulla' ? 'Thulla → ' + nameOf(prev.collector) : 'Cleared')),
+        h('ol.ts-plays', prev.plays.map(p => playRow(p)))));
+    }
+    const order = V.seats ? V.seats.map((x, i) => ({ ...x, i })) : [];
+    if (order.length) {
+      order.sort((a, c) => (a.finished === c.finished ? relPos(a.i) - relPos(c.i) : a.finished ? -1 : 1));
+      blocks.push(h('section.ts-block',
+        h('header', h('span.eyebrow', 'Players')),
+        h('ol.ts-seats', order.map(x => h('li' + (x.i === V.current && V.phase === 'turn' ? '.is-turn' : '') + (x.finished ? '.is-done' : ''),
+          avatar(seatsMeta[x.i], 'sm'), h('span.ts-name', nameOf(x.i)),
+          x.finished ? h('span.ts-place', ordinal(x.place)) : h('span.ts-count.num', h('span.mini-back'), x.i === me ? hand.length : x.count))))));
+    }
+    side.replaceChildren(...blocks);
+  }
   const possessive = i => (i === me ? 'your' : nameOf(i) + '’s');
   const cap = s => s.replace(/^./, c => c.toUpperCase());
 
@@ -282,7 +342,8 @@ export function mountThullaTable(container, o) {
   }
 
   /* ------------------------------------------------------------ hand */
-  function handCardSize() { const w = window.innerWidth; return w < 560 ? 60 : w < 900 ? 76 : 92; }
+  function handCardSize() { const w = window.innerWidth; return w < 560 ? 66 : w < 900 ? 78 : 92; }
+  const handCards = () => Array.from(handEl.querySelectorAll(':scope > .pcard'));
   function myTurn() { return V && V.phase === 'turn' && V.current === me && !busy && !pendingRequest() && !seatInfo(me).finished; }
   function legalSet() {
     if (!myTurn()) return new Set();
@@ -306,28 +367,48 @@ export function mountThullaTable(container, o) {
     const ids = sortIds(hand, sortMode);
     const turn = myTurn() && !sending;
     const legal = legalSet();
-    const cw = handCardSize();
-    handEl.replaceChildren();
-    handEl.style.setProperty('--hcw', cw + 'px');
-    ids.forEach((id, i) => {
+    // Cards are kept by id and only updated, never rebuilt: rebuilding restarts every
+    // card's transitions, so the whole hand would pulse whenever anything changed.
+    handEl.querySelector('.hand-break')?.remove();
+    const old = new Map(handCards().map(c => [c.dataset.card, c]));
+    const fresh = [];
+    const els = ids.map((id, i) => {
+      let el = old.get(id);
+      if (el) old.delete(id);
+      else {
+        el = renderCard(id, { size: lay.cw || handCardSize(), button: true });
+        el.setAttribute('role', 'option');
+        el.dataset.label = el.getAttribute('aria-label');
+        el.classList.add('no-trans');                                // appears in place, no slide-in
+        el.addEventListener('click', () => onCardClick(id, el));
+        el.addEventListener('dblclick', () => humanPlay(id));
+        el.addEventListener('keydown', e => onCardKey(e, handCards().indexOf(el)));
+        fresh.push(el);
+      }
       const can = turn && legal.has(id);
-      const el = renderCard(id, { size: cw, button: true });
+      el.classList.remove('is-playable', 'is-disabled', 'is-idle', 'is-selected', 'will-thulla');
       el.classList.add(turn ? (can ? 'is-playable' : 'is-disabled') : 'is-idle');
-      if (selected === id) el.classList.add('is-selected');
-      if (selected === id && willThulla(id)) el.classList.add('will-thulla');
-      if (newCards.has(id)) el.classList.add('is-new');
-      el.setAttribute('role', 'option');
+      el.classList.toggle('is-selected', selected === id);
+      el.classList.toggle('will-thulla', selected === id && willThulla(id));
+      el.classList.toggle('is-new', newCards.has(id));
       el.setAttribute('aria-selected', String(selected === id));
       el.setAttribute('aria-disabled', String(!can));
-      el.setAttribute('aria-label', el.getAttribute('aria-label') + (turn ? (can ? (willThulla(id) ? ' — gives Thulla' : ' — playable') : ' — cannot play') : ''));
+      el.setAttribute('aria-label', el.dataset.label + (turn ? (can ? (willThulla(id) ? ' — gives Thulla' : ' — playable') : ' — cannot play') : ''));
       el.tabIndex = (selected ? selected === id : i === 0) ? 0 : -1;
-      el.style.zIndex = String(i + 1);
-      el.addEventListener('click', () => onCardClick(id, el));
-      el.addEventListener('dblclick', () => { if (can) humanPlay(id); });
-      el.addEventListener('keydown', e => onCardKey(e, i));
-      handEl.appendChild(el);
+      el.style.zIndex = String(selected === id ? 300 : i + 1);     // a lifted card sits above the row in front of it
+      return el;
     });
+    old.forEach(el => el.remove());
+    // Put each card before its right-hand neighbour, touching only cards that are out of place
+    // (new ones, or everything after a re-sort), so the rest keep their state.
+    let next = null;
+    for (let i = els.length - 1; i >= 0; i--) {
+      if (els[i].parentNode !== handEl || els[i].nextElementSibling !== next) handEl.insertBefore(els[i], next);
+      next = els[i];
+    }
     fitHand();
+    if (fresh.length) requestAnimationFrame(() => requestAnimationFrame(() => fresh.forEach(el => el.classList.remove('no-trans'))));
+    updateTally();
     playBtn.disabled = !(turn && selected && legal.has(selected));
     const th = !!(selected && turn && willThulla(selected));
     playBtn.textContent = th ? 'Give Thulla' : 'Play card';
@@ -339,14 +420,110 @@ export function mountThullaTable(container, o) {
     dock.classList.toggle('my-turn', !!turn);
   }
 
+  // Smallest visible strip of an overlapped card: still shows its corner rank and suit.
+  const MIN_STEP = .3;
+  const HAND_PAD = 12;                       // .hand's horizontal padding
+  const ROW_SHOW = .5;                       // share of a back-row card left showing above the front row
+  let lay = { cw: 0, step: 0, k: 0, over: false, rows: 1, split: 0 };
+  /**
+   * Fit the hand to the dock: overlap more, then (on phones) split into two
+   * rows of full-size cards, then shrink, and only then scroll.
+   */
   function fitHand() {
-    const cards = handEl.children; const k = cards.length; if (!k) return;
-    const cw = parseFloat(handEl.style.getPropertyValue('--hcw')) || 90;
-    const avail = handEl.clientWidth - 32;
-    let step = Math.min(cw * 0.8, (avail - cw) / Math.max(1, k - 1));
-    step = Math.max(step, Math.min(cw * 0.36, 26));
-    handEl.classList.toggle('overflowing', step * (k - 1) + cw > avail + 2);
-    for (let i = 0; i < k; i++) cards[i].style.marginLeft = i ? (step - cw) + 'px' : '0px';
+    const cards = handCards(); const k = cards.length;
+    handEl.querySelector('.hand-break')?.remove();
+    const max = handCardSize();
+    const avail = handEl.clientWidth - HAND_PAD * 2;
+    const fitCw = per => Math.floor(avail / (1 + MIN_STEP * (per - 1)));
+    let cw = max, rows = 1;
+    if (k > 1 && fitCw(k) < max) {
+      const per = Math.ceil(k / 2);
+      if (window.innerWidth < 760 && k >= 8 && fitCw(per) >= 54) { rows = 2; cw = Math.min(max, fitCw(per)); }
+      else cw = Math.max(window.innerWidth < 760 ? 50 : Math.round(max * .7), fitCw(k));   // smallest still easy to read
+    }
+    const split = rows === 2 ? Math.ceil(k / 2) : k;
+    // Floored, with a pixel spare: a row exactly as wide as the dock can wrap its last card from rounding.
+    let step = Math.min(cw * 0.8, Math.floor((avail - 1 - cw) / Math.max(1, split - 1)));
+    step = Math.max(step, cw * MIN_STEP);
+    lay = { cw, step, k, rows, split, over: rows === 1 && k > 0 && step * (k - 1) + cw > avail + 2 };
+    handEl.style.setProperty('--hcw', cw + 'px');
+    handEl.classList.toggle('overflowing', lay.over);
+    handEl.classList.toggle('two-rows', rows === 2);
+    if (rows === 2) cards[split].before(h('span.hand-break', { 'aria-hidden': 'true' }));
+    for (let i = 0; i < k; i++) {
+      const c = cards[i], back = rows === 2 && i >= split;
+      c.style.setProperty('--cw', cw + 'px');
+      c.style.marginLeft = i === 0 || i === split ? '0px' : (step - cw) + 'px';
+      c.style.marginTop = back ? -(cw * 1.4 * (1 - ROW_SHOW)) + 'px' : '';
+    }
+    updateHandScroll();
+  }
+  // Card positions come from the layout maths, not from measuring: the margins
+  // animate, so measured positions lag behind for a moment after every change.
+  const cardX = i => HAND_PAD + i * lay.step;                       // left edge, in scroll coordinates
+  const stripW = i => (i === lay.k - 1 ? lay.cw : lay.step);        // the part of card i not covered by the next
+
+  /** Edge arrows + counts for cards scrolled out of view; gold when a playable card is hidden. */
+  function updateHandScroll() {
+    const cards = handCards();
+    let left = 0, right = 0, playL = false, playR = false;
+    if (lay.over) {
+      const a = handEl.scrollLeft, b = a + handEl.clientWidth;
+      for (let i = 0; i < cards.length; i++) {
+        const mid = cardX(i) + stripW(i) / 2;
+        const playable = cards[i].classList.contains('is-playable');
+        if (mid < a + 6) { left++; playL ||= playable; }
+        else if (mid > b - 6) { right++; playR ||= playable; }
+      }
+    }
+    const set = (btn, k, playable, dir) => {
+      btn.hidden = !k;
+      btn.classList.toggle('has-playable', playable);
+      btn.querySelector('.hm-num').textContent = k ? '+' + k : '';
+      btn.setAttribute('aria-label', 'Scroll ' + dir + ': ' + plural(k, 'more card') + (playable ? ', including playable ones' : ''));
+    };
+    set(moreL, left, playL, 'left'); set(moreR, right, playR, 'right');
+    handWrap.classList.toggle('fade-l', left > 0);
+    handWrap.classList.toggle('fade-r', right > 0);
+  }
+
+  /** Scroll the hand (never the page) so cards i..j are in view, centred when they fit. */
+  function scrollToCards(i, j = i) {
+    if (!lay.over) return;
+    const l = cardX(i), r = cardX(j) + stripW(j), w = handEl.clientWidth, pad = 44;
+    const a = handEl.scrollLeft;
+    if (l >= a + pad && r <= a + w - pad) return;                     // already visible
+    const target = r - l <= w - pad * 2 ? (l + r) / 2 - w / 2 : l - pad;
+    handEl.scrollTo({ left: Math.max(0, target), behavior: reducedMotion() ? 'auto' : 'smooth' });
+  }
+  function scrollCardIntoView(el) {
+    const i = el ? handCards().indexOf(el) : -1;
+    if (i >= 0) scrollToCards(i);
+  }
+
+  function updateTally(cards = hand) {
+    const lead = myTurn() && V.baari && V.baari.leadSuit;
+    SUIT_ORDER.forEach(s => {
+      const k = cards.reduce((a, id) => a + (id.slice(-1) === s ? 1 : 0), 0);
+      const t = tallyEls[s];
+      t.num.textContent = k;
+      t.b.disabled = !k;
+      t.b.classList.toggle('is-lead', lead === s);
+      t.b.title = plural(k, SUIT_NAMES[s].replace(/s$/, '')) + (k ? ' — show them' : '');
+      t.b.setAttribute('aria-label', k + ' ' + SUIT_NAMES[s] + (lead === s ? ', the shape to follow' : ''));
+    });
+  }
+
+  /** Tally tap: scroll to the shape and briefly lift its cards. */
+  function showSuit(s) {
+    const all = handCards();
+    const idx = all.map((c, i) => (c.dataset.card && c.dataset.card.slice(-1) === s ? i : -1)).filter(i => i >= 0);
+    if (!idx.length) return;
+    // Sorted by shape they sit together; sorted by rank they are scattered, so start at the first.
+    scrollToCards(idx[0], sortMode === 'suit' ? idx[idx.length - 1] : idx[0]);
+    const cards = idx.map(i => all[i]);
+    cards.forEach(c => { c.classList.remove('suit-flash'); void c.offsetWidth; c.classList.add('suit-flash'); });
+    later(() => cards.forEach(c => c.classList.remove('suit-flash')), 1200);
   }
 
   function updateHint(turn) {
@@ -388,7 +565,7 @@ export function mountThullaTable(container, o) {
     hintEl.textContent = reason; hintEl.className = 'hand-hint warn';
   }
   function onCardKey(e, i) {
-    const cards = Array.from(handEl.children);
+    const cards = handCards();
     if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
       e.preventDefault();
       const j = Math.max(0, Math.min(cards.length - 1, i + (e.key === 'ArrowRight' ? 1 : -1)));
@@ -510,7 +687,7 @@ export function mountThullaTable(container, o) {
   }
 
   /* ------------------------------------------------------------ pile */
-  function pileSize() { const w = Math.min(stage.clientWidth, stage.clientHeight * 1.4); let s = w < 520 ? 56 : w < 760 ? 66 : 78; if (n > 6) s *= .86; if (n > 10) s *= .85; return Math.round(s); }
+  function pileSize() { const w = Math.min(stage.clientWidth, stage.clientHeight * 1.4); let s = w < 520 ? 64 : w < 760 ? 70 : 80; if (n > 6) s *= .86; if (n > 10) s *= .85; return Math.round(s); }
   function slotTransform(seat, index) {
     const a = seatAngle(seat);
     const cw = pileSize();
@@ -525,6 +702,9 @@ export function mountThullaTable(container, o) {
     c.style.transform = 'rotate(' + t.rot + 'deg)';
     slot.appendChild(c);
     slot.style.marginLeft = (-cw / 2) + 'px'; slot.style.marginTop = (-cw * 0.7) + 'px';
+    // Who played it: a name tab on the edge facing that player, so the next card rarely covers it.
+    const above = Math.sin(seatAngle(seat)) < -0.3;
+    slot.appendChild(h('span.pc-who' + (seat === me ? '.me' : ''), { style: { left: cw / 2 + 'px', top: (above ? -8 : cw * 1.4 - 8) + 'px' } }, nameOf(seat)));
     if (hidden) slot.style.visibility = 'hidden';
     pileEl.appendChild(slot);
     return { slot, card: c, rot: t.rot, cw };
@@ -725,32 +905,95 @@ export function mountThullaTable(container, o) {
   /* ------------------------------------------------------------ deal */
   async function animateDeal(order, fast) {
     const counts = new Array(n).fill(0);
-    const showCount = () => seatEls.forEach((el, i) => { el.querySelector('.cnum').textContent = counts[i]; });
+    // Counts (and your shape tally) climb as the cards land.
+    const showCount = () => {
+      seatEls.forEach((el, i) => { el.querySelector('.cnum').textContent = counts[i]; });
+      if (me >= 0) { meCount.textContent = plural(counts[me], 'card'); updateTally(hand.slice(0, counts[me])); }
+    };
     showCount();
     setLead(); baariChip.textContent = 'Dealing'; turnLine.textContent = 'Dealing ' + order.length + ' cards';
-    handEl.replaceChildren();
+    handEl.replaceChildren(); updateHandScroll();
     if (fast || reducedMotion()) return;
-    const deck = h('div.deal-deck', renderCard('back', { size: pileSize() }), renderCard('back', { size: pileSize() }));
-    pileEl.appendChild(deck);
-    const dr = deck.getBoundingClientRect();
-    const step = Math.max(14, Math.min(34, 1500 / order.length));
+    const cw = pileSize();
+    turnLine.textContent = 'Shuffling…';
+    const { deck, cards } = await animateShuffle(cw);
+    if (destroyed) return;
+    turnLine.textContent = 'Dealing ' + order.length + ' cards';
+    const dr = deck.getBoundingClientRect();       // zero-size box at the deck's centre
+    const fw = 40, s0 = cw / fw;
+    const step = Math.max(10, Math.min(24, 1200 / order.length));
     await Promise.all(order.map((seat, k) => new Promise(res => {
       later(() => {
-        const to = seat === me ? handEl.getBoundingClientRect() : seatEls[seat].querySelector('.seat-av').getBoundingClientRect();
-        const el = renderCard('back', { size: 40 });
-        el.style.position = 'fixed'; el.style.left = (dr.left + dr.width / 2 - 20) + 'px'; el.style.top = (dr.top + dr.height / 2 - 28) + 'px';
+        const mine = seat === me;
+        const to = mine ? handEl.getBoundingClientRect() : seatEls[seat].querySelector('.seat-av').getBoundingClientRect();
+        const el = renderCard('back', { size: fw, className: 'flying' });
+        el.style.position = 'fixed'; el.style.left = (dr.left - fw / 2) + 'px'; el.style.top = (dr.top - fw * .7) + 'px';
         fx.appendChild(el);
-        const dx = to.left + to.width / 2 - (dr.left + dr.width / 2), dy = to.top + to.height / 2 - (dr.top + dr.height / 2);
+        // The deck thins out as it is dealt.
+        const left = Math.ceil((order.length - k - 1) / order.length * cards.length);
+        cards.forEach((c, i) => { c.style.visibility = i < Math.max(left, k < order.length - 1 ? 1 : 0) ? '' : 'hidden'; });
+        const dx = to.left + to.width / 2 - dr.left, dy = to.top + to.height / 2 - dr.top;
+        const spin = (k % 2 ? 1 : -1) * (mine ? 0 : 200);
         playSound('deal');
-        animate(el, [{ transform: 'translate(0,0) rotate(0deg)', opacity: 1 }, { transform: `translate(${dx}px,${dy}px) rotate(${(k % 2 ? 1 : -1) * 180}deg)`, opacity: .3 }], { duration: 300, easing: 'cubic-bezier(.3,.6,.3,1)' })
-          .then(() => { el.remove(); counts[seat]++; showCount(); res(); });
+        animate(el, [
+          { transform: `translate(0,0) rotate(0deg) scale(${s0})`, opacity: 1 },
+          { transform: `translate(${dx * .55}px,${dy * .55 - 26}px) rotate(${spin * .6}deg) scale(${(s0 + 1) / 2})`, opacity: 1, offset: .5 },
+          { transform: `translate(${dx}px,${dy}px) rotate(${spin}deg) scale(${mine ? 1.1 : .7})`, opacity: mine ? .7 : .25 },
+        ], { duration: 320, easing: 'cubic-bezier(.3,.6,.3,1)' })
+          .then(() => {
+            el.remove(); counts[seat]++; showCount();
+            if (!mine) animate(seatEls[seat].querySelector('.seat-count'), [{ transform: 'scale(1.25)' }, { transform: 'scale(1)' }], { duration: 160, fill: 'none' });
+            res();
+          });
       }, k * step);
     })));
     deck.remove();
   }
+
+  /* Shuffle on the felt: the deck lands, is riffled twice, then squared up. Visual
+     only: the server has already shuffled and dealt. */
+  const DECK_CARDS = 14;
+  const stackAt = (i, dx = 0, rot = 0, lift = 0) => `translate(${dx - i * .35}px, ${-i * .55 - lift}px) rotate(${rot}deg)`;
+  /** Move to `to`, setting the end state first so nothing flashes when the animation ends. */
+  function slide(el, to, opts) {
+    const from = el.style.transform || 'none';
+    el.style.transform = to;
+    return animate(el, [{ transform: from }, { transform: to }], { fill: 'none', ...opts });
+  }
+  async function animateShuffle(cw) {
+    let cards = Array.from({ length: DECK_CARDS }, (_, i) => {
+      const c = renderCard('back', { size: cw });
+      c.style.transform = stackAt(i); c.style.zIndex = String(i + 1);
+      return c;
+    });
+    const deck = h('div.deal-deck', cards);
+    pileEl.appendChild(deck);
+    await animate(deck, [{ opacity: 0, transform: 'translateY(-28px) scale(.9)' }, { opacity: 1, transform: 'none' }], { duration: 240, easing: 'cubic-bezier(.2,.8,.2,1.2)', fill: 'none' });
+    const spread = cw * .6, half = DECK_CARDS / 2;
+    for (let round = 0; round < 2 && !destroyed; round++) {
+      const a = cards.slice(0, half), b = cards.slice(half);
+      // Cut: the halves slide apart and bend up, as if under the thumbs.
+      await Promise.all([
+        ...a.map((c, i) => slide(c, stackAt(i, -spread, -10, 6), { duration: 200, easing: 'cubic-bezier(.3,.7,.3,1)' })),
+        ...b.map((c, i) => slide(c, stackAt(i, spread, 10, 6), { duration: 200, easing: 'cubic-bezier(.3,.7,.3,1)' })),
+      ]);
+      // Riffle: cards drop alternately from each half into one interleaved stack.
+      const order = [];
+      for (let i = 0; i < half; i++) round % 2 ? order.push(b[i], a[i]) : order.push(a[i], b[i]);
+      await Promise.all(order.map((c, j) => new Promise(res => later(() => {
+        c.style.zIndex = String(j + 1);
+        if (j % 2 === 0) playSound('deal');
+        slide(c, stackAt(j), { duration: 140, easing: 'cubic-bezier(.5,0,.6,1)' }).then(res);
+      }, j * 22))));
+      cards = order;
+    }
+    // Square the deck with a tap.
+    await animate(deck, [{ transform: 'none' }, { transform: 'translateY(-5px) scale(1.03)' }, { transform: 'none' }], { duration: 220, fill: 'none' });
+    return { deck, cards };
+  }
   function fanInHand() {
     if (reducedMotion()) return;
-    Array.from(handEl.children).forEach((c, i) => animate(c, [{ transform: 'translateY(40px) rotate(-6deg)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 380, delay: i * 30, easing: 'cubic-bezier(.2,.8,.2,1)', fill: 'none' }));
+    handCards().forEach((c, i) => animate(c, [{ transform: 'translateY(40px) rotate(-6deg)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 380, delay: i * 30, easing: 'cubic-bezier(.2,.8,.2,1)', fill: 'none' }));
   }
 
   /* ------------------------------------------------------------ event handling */
@@ -821,6 +1064,9 @@ export function mountThullaTable(container, o) {
           dock.classList.remove('turn-pop'); void dock.offsetWidth; dock.classList.add('turn-pop');
           const legal = legalSet();
           if (legal.size === 1 && V.baari.number === 1 && V.baari.plays.length === 0) { selected = [...legal][0]; renderHand(); }
+          // On a scrolling hand, make sure a card you can play is on screen.
+          const firstPlayable = handEl.querySelector('.is-selected') || handEl.querySelector('.is-playable');
+          scrollCardIntoView(firstPlayable);
         }
         break;
       }

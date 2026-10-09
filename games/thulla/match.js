@@ -7,11 +7,13 @@
  */
 import * as R from './engine/rules.js';
 import { defaultSettings, normalizeSettings, LIMITS } from './settings.js';
+import { chooseCard, seatView, PERSONALITIES } from './engine/strategy.js';
+import { BOTS, BOT_BY_ID, personaOf, chatterFor, greetingReply } from './bots.js';
 
 /** Presentation allowances (ms) added to deadlines so every client has time to
  *  animate an event before the next timer starts. Never affect outcomes. */
 export const TIMING = {
-  dealMs: 2600,         // shuffle + deal animation
+  dealMs: 3800,         // shuffle (~1.7s) + deal (~1.5s) animation
   playMs: 450,          // a card flying to the pile
   slamMs: 1000,         // the Thulla raise, wind-up and slam
   clearMs: 1100,        // pile sweeping off the table
@@ -42,14 +44,29 @@ function seatsInfo(m) {
   }));
 }
 
+/** How long a bot "thinks" before playing. */
+function thinkMs(m, seat) {
+  const [lo, hi] = BOT_BY_ID[m.bots[seat]]?.think || [900, 1600];
+  return Math.round(lo + m.rng() * (hi - lo));
+}
+
+/**
+ * The card the server plays: the bot's own style, or a steady player's choice for timeouts and
+ * away players. The strategy only ever sees this seat's view (own hand + public table), never S.
+ */
+function serverCard(m, seat) {
+  const view = seatView(m.S, seat);
+  return m.bots[seat] ? chooseCard(view, personaOf(m.bots[seat]), m.rng) : chooseCard(view, PERSONALITIES.steady);
+}
+
 /** Start the current player's turn and announce it. */
 function beginTurn(m, now, grace = 0, events = []) {
   const S = m.S;
   const seat = S.current;
   m.sub = 'turn';
   const from = now + grace;
-  const dl = m.away[seat]
-    ? setDeadline(m, 'auto', from + TIMING.awayDelayMs, seat)
+  const dl = m.bots[seat] ? setDeadline(m, 'auto', from + thinkMs(m, seat), seat)
+    : m.away[seat] ? setDeadline(m, 'auto', from + TIMING.awayDelayMs, seat)
     : setDeadline(m, 'turn', from + m.turnMs, seat);
   events.push({
     type: 'turn', seat, from, deadline: dl.at, auto: dl.kind === 'auto',
@@ -142,7 +159,14 @@ export const thulla = {
   normalizeSettings,
   TIMING,
 
-  /** @param {{players:{id:string,name:string}[], settings:object, rng?:()=>number, seed?:number, hands?:string[][], dealer?:number, now:number}} o */
+  /** Bots a host can seat at an unranked table. */
+  bots: {
+    roster: BOTS.map(b => ({ id: b.id, name: b.name, persona: PERSONALITIES[b.persona].label })),
+    chatterFor,
+    greetingReply,
+  },
+
+  /** @param {{players:{id:string,name:string,bot?:string|null}[], settings:object, rng?:()=>number, seed?:number, hands?:string[][], dealer?:number, now:number}} o */
   createMatch(o) {
     const S = R.createGame({ players: o.players, rng: o.rng, seed: o.seed, hands: o.hands, dealer: o.dealer });
     const n = S.players.length;
@@ -152,6 +176,8 @@ export const thulla = {
       turnMs: o.settings.turnSeconds * 1000, pileMs: o.settings.pileSeconds * 1000,
       revealMs: o.settings.revealSeconds * 1000, showCleared: !!o.settings.showCleared,
       startedAt: o.now,
+      bots: o.players.map(p => p.bot || null),    // bot id per seat, null for people
+      rng: o.rng || Math.random,
     };
     setDeadline(m, 'deal', o.now + TIMING.dealMs);
     const events = [{
@@ -214,8 +240,8 @@ export const thulla = {
       setAway(m, seat, false, events);
       const { to } = R.makeRequest(S, seat);
       m.sub = 'turn';
-      const dl = m.away[to]
-        ? setDeadline(m, 'request', now + TIMING.awayDelayMs, to)
+      const dl = m.bots[to] ? setDeadline(m, 'request', now + thinkMs(m, to), to)
+        : m.away[to] ? setDeadline(m, 'request', now + TIMING.awayDelayMs, to)
         : setDeadline(m, 'request', now + m.turnMs, to);
       events.push({ type: 'request', from: seat, to, deadline: dl.at, cardsInHand: S.players[to].hand.length, place: S.finishOrder.length + 1 });
       return { events };
@@ -254,12 +280,12 @@ export const thulla = {
           events.push({ type: 'timeout', seat, count: m.timeouts[seat] });
           if (m.timeouts[seat] >= AWAY_AFTER_TIMEOUTS) setAway(m, seat, true, events);
         }
-        const res = doPlay(m, seat, R.autoCard(S, seat), now, dl.kind);
+        const res = doPlay(m, seat, serverCard(m, seat), now, dl.kind);
         res.events.unshift(...events);
         return res;
       }
-      case 'request':   // unanswered request counts as Keep: nothing is transferred
-        return answer(m, false, now, 'timeout');
+      case 'request':   // bots always give (it finishes them); an unanswered request counts as Keep
+        return m.bots[dl.seat] ? answer(m, true, now, 'bot') : answer(m, false, now, 'timeout');
       case 'review':
         return resolve(m, now);
       case 'reveal': {

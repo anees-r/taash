@@ -28,6 +28,8 @@ export function TableClient({ code, rating, appUrl }) {
   const [result, setResult] = useState(null);
   const [view, setView] = useState('lobby');      // lobby | game | results
   const controllerRef = useRef(null);
+  // Every game event since the last snapshot. A freshly mounted view replays them all and skips
+  // what it has seen (by seq), so a remount (React Strict Mode in dev) still animates the deal.
   const buffer = useRef([]);
   const viewRef = useRef(view);
   viewRef.current = view;
@@ -35,7 +37,7 @@ export function TableClient({ code, rating, appUrl }) {
   phaseRef.current = phase;
 
   const applySnapshot = useCallback(snap => {
-    setTable({ code: snap.code, gameId: snap.gameId, hostId: snap.hostId, status: snap.status, settings: snap.settings, players: snap.players, gamesPlayed: snap.gamesPlayed });
+    setTable({ code: snap.code, gameId: snap.gameId, hostId: snap.hostId, status: snap.status, settings: snap.settings, options: snap.options, players: snap.players, gamesPlayed: snap.gamesPlayed });
     setYou(snap.you);
     setChat(snap.chat);
     setResult(snap.result);
@@ -71,9 +73,13 @@ export function TableClient({ code, rating, appUrl }) {
     if (viewer.kind === 'anon') return;
     const s = getSocket();
     const mine = d => d && d.code === code;
-    const toController = item => { if (controllerRef.current) item.kind === 'events' ? controllerRef.current.pushEvents(item.data) : controllerRef.current.pushHand(item.data); else buffer.current.push(item); };
+    const toController = item => {
+      buffer.current.push(item);
+      if (buffer.current.length > 400) buffer.current.shift();   // a view that misses one resyncs
+      if (controllerRef.current) item.kind === 'events' ? controllerRef.current.pushEvents(item.data) : controllerRef.current.pushHand(item.data);
+    };
     const handlers = {
-      'table:state': d => { if (!mine(d)) return; setTable(t => (t ? { ...t, hostId: d.hostId, status: d.status, settings: d.settings, players: d.players, gamesPlayed: d.gamesPlayed } : t)); },
+      'table:state': d => { if (!mine(d)) return; setTable(t => (t ? { ...t, hostId: d.hostId, status: d.status, settings: d.settings, options: d.options, players: d.players, gamesPlayed: d.gamesPlayed } : t)); },
       'chat:msg': d => { if (!mine(d)) return; setChat(c => (c.some(m => m.id === d.msg.id) ? c : [...c.slice(-149), d.msg])); },
       'game:snapshot': d => { if (!mine(d)) return; const sn = d.snapshot; buffer.current = []; controllerRef.current = null; setResult(null); setGame({ ...sn.game, seq: sn.seq, now: sn.now }); setView('game'); },
       'game:events': d => { if (mine(d)) toController({ kind: 'events', data: d }); },
@@ -94,8 +100,7 @@ export function TableClient({ code, rating, appUrl }) {
 
   const onMounted = useCallback(c => {
     c.matchId = game?.matchId;
-    const items = buffer.current; buffer.current = [];
-    for (const it of items) it.kind === 'events' ? c.pushEvents(it.data) : c.pushHand(it.data);
+    for (const it of buffer.current) it.kind === 'events' ? c.pushEvents(it.data) : c.pushHand(it.data);
   }, [game?.matchId]);
 
   const onAction = useCallback(a => call('game:action', { code, actionId: actionId(), action: a }), [code]);
@@ -150,7 +155,7 @@ export function TableClient({ code, rating, appUrl }) {
   );
 }
 
-/** Mount the game view, then hand it any events that arrived while it was mounting. */
+/** Mount the game view, then replay the events since its snapshot. */
 function GameHost({ TableView, onMounted, controllerRef, ...props }) {
   const local = useRef({ current: null });
   const proxy = useRef(null);

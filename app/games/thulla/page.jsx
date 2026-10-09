@@ -5,6 +5,8 @@ import { Icon } from '@/components/platform/Icon';
 import { Crumbs } from '@/components/platform/controls';
 import { TablePreview } from '@/components/platform/TablePreview';
 import { CreateTableButton } from '@/components/platform/CreateTable';
+import { OpenRooms } from '@/components/platform/OpenRooms';
+import { publicTables } from '@/lib/server/live';
 import { getViewer } from '@/lib/auth/viewer';
 import { getRating, recentMatches } from '@/lib/db/social';
 import { catalog } from '@/games/catalog';
@@ -41,6 +43,8 @@ export default async function ThullaLanding() {
           </div>
           <TablePreview youName={viewer.kind === 'anon' ? 'You' : viewer.name} />
         </section>
+
+        <OpenRooms initial={publicTables()} />
 
         <section className="moves">
           <article className="move"><span className="move-k"><svg className="i" aria-hidden="true"><use href="#suit-H" /></svg></span><h3>Follow the shape</h3><p className="muted">The first card of a baari sets its shape. If you hold that shape, you must play it. When everyone follows, the baari clears for good.</p></article>

@@ -41,7 +41,7 @@ export function Chat({ code, messages, you, compact, idSuffix = 'main', open = t
           : (
             <li key={m.id} className={'chat-msg' + (m.from === you ? ' mine' : '')}>
               {m.from === you ? null : <Avatar person={{ name: m.name }} size="sm" />}
-              <div className="bubble"><div className="meta"><b>{m.from === you ? 'You' : firstName(m.name)}</b><time dateTime={new Date(m.at).toISOString()}>{clockTime(m.at)}</time></div><p>{m.text}</p></div>
+              <div className="bubble"><div className="meta"><b>{m.from === you ? 'You' : firstName(m.name)}</b>{m.bot ? <span className="bot-tag">bot</span> : null}<time dateTime={new Date(m.at).toISOString()}>{clockTime(m.at)}</time></div><p>{m.text}</p></div>
             </li>
           ))}
       </ol>

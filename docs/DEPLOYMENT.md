@@ -34,6 +34,11 @@ Environment variables (Coolify → app → Environment Variables):
 | `DB_POOL_MAX` | `8` (optional) |
 | `LOG_LEVEL` | `info` (optional) |
 | `NODE_OPTIONS` | `--max-old-space-size=256` (optional cap for small servers) |
+| `BREVO_API_KEY` | Brevo API key: the main route for "forgot password" emails |
+| `MAIL_FROM` / `MAIL_FROM_NAME` | sender address (verified in Brevo) and name, e.g. `no-reply@nezden.com` / `Taash` |
+| `GMAIL_USER` / `GMAIL_APP_PASSWORD` | fallback when Brevo is missing or fails: a Gmail address and a Google app password |
+
+Set at least one mail route in production, or "forgot password" emails cannot be sent (the page still answers normally and the failure is logged).
 
 Do **not** set `TAASH_E2E` in production.
 

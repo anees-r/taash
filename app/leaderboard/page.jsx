@@ -21,7 +21,7 @@ export default async function LeaderboardPage({ searchParams }) {
   const page = Math.max(0, Math.min(1000, parseInt(sp.page, 10) || 0));
   const rows = await leaderboard({ scope, sort, page, userId: user?.userId });
   const expl = sort === 'rating'
-    ? 'Ranked by Thulla rating. Rating rises when you finish ahead of other players and falls when you finish behind them, weighted by their ratings and the table size.'
+    ? 'Ranked by Thulla rating, from ranked games only. Rating rises when you finish ahead of other players and falls when you finish behind them, weighted by their ratings. Going out early wins more; leaving a game loses the most.'
     : 'Ranked by the number of games finished in 1st place. Ties go to the higher rating.';
   const qs = p => '/leaderboard?' + new URLSearchParams({ scope, sort, page: String(p) }).toString();
   return (

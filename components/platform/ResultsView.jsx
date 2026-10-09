@@ -32,6 +32,9 @@ export function ResultsView({ table, result, you, viewerKind, chat, onBackToLobb
   const s = result.summary;
   const nameIn = p => (p.id === you ? 'You' : p.name);
   const bySeat = seat => result.players.find(p => p.seat === seat);
+  const ranked = result.ranked !== false;
+  const deltaOf = p => (result.ratings && result.ratings[p.id] ? result.ratings[p.id].delta : null);
+  const leftChip = p => (p.forfeit ? <span className="chip chip-ember" title="Left before the game ended: ranked last and loses rating">Left</span> : null);
 
   useEffect(() => {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches || !pageRef.current) return;
@@ -64,6 +67,8 @@ export function ResultsView({ table, result, you, viewerKind, chat, onBackToLobb
       <div className="results-head">
         <p className="eyebrow">{meta.name} · table {table.code} · game {result.gameNo}</p>
         <h1 className="page-title">{winner ? (winner.id === you ? 'You finished first!' : firstName(winner.name) + ' finished first') : 'Game over'}</h1>
+        {result.everyoneLeft ? <p className="muted">Everyone left, so the game ended there. Everyone who left while holding cards forfeits and loses rating.</p>
+          : result.endedEarly ? <p className="muted">The game ended early because everyone else left. Players who left forfeit.</p> : null}
       </div>
       <div className="results-grid">
         <div className="results-main">
@@ -76,7 +81,7 @@ export function ResultsView({ table, result, you, viewerKind, chat, onBackToLobb
               <div className="pod-step" aria-hidden="true" />
             </li>
           ))}</ol>
-          {finishers.length > 3 ? <ol className="rest-list" start={4}>{finishers.slice(3).map(p => <li key={p.id}><span className="num rank">{ordinal(p.place)}</span><Avatar person={p} size="sm" /><span>{nameIn(p)}</span></li>)}</ol> : null}
+          {finishers.length > 3 ? <ol className="rest-list" start={4}>{finishers.slice(3).map(p => <li key={p.id}><span className="num rank">{ordinal(p.place)}</span><Avatar person={p} size="sm" /><span>{nameIn(p)}</span>{leftChip(p)}</li>)}</ol> : null}
           {loser ? (
             <section className="loser-card">
               <div className="lc-cards" aria-hidden="true">{[0, 1, 2].map(i => <span key={i} style={{ '--i': i }}><PlayingCard card="back" size={54} /></span>)}</div>
@@ -86,8 +91,9 @@ export function ResultsView({ table, result, you, viewerKind, chat, onBackToLobb
                 <span className="faint num">Finished the game with {plural(loser.stats.cardsLeft || 0, 'card')} in hand</span>
               </div>
             </section>
-          ) : <section className="loser-card"><p>Everyone emptied their hand together — nobody is left holding the cards.</p></section>}
-          {mine && viewerKind === 'user' ? (
+          ) : <section className="loser-card"><p>{result.endedEarly ? (result.everyoneLeft ? 'Nobody is left holding the cards: the game stopped when everyone left.' : 'Nobody is left holding the cards: the game stopped when everyone else left.') : 'Everyone emptied their hand together — nobody is left holding the cards.'}</p></section>}
+          {!ranked ? <div className="rating-change"><Icon id="i-info" /><span className="faint">Unranked game: nobody’s rating changed.</span></div>
+          : mine && viewerKind === 'user' ? (
             <div className="rating-change"><Icon id="i-trophy" />
               {myRating ? <span>Thulla rating <b className="num">{myRating.after}</b> <span className={'delta num ' + (myRating.delta >= 0 ? 'up' : 'down')}>{(myRating.delta >= 0 ? '+' : '') + myRating.delta}</span></span> : <span className="faint">Updating your rating…</span>}
             </div>
@@ -113,7 +119,7 @@ export function ResultsView({ table, result, you, viewerKind, chat, onBackToLobb
         </div>
         <aside className="results-side">
           <section className="panel panel-pad"><h2 className="section-title">Finishing order</h2>
-            <ol className="order-list">{ordered.map(p => <li key={p.id} className={p.isLoser ? 'lost' : undefined}><span className="num rank">{ordinal(p.place)}</span><Avatar person={p} size="sm" /><span>{nameIn(p)}</span>{p.isLoser ? <span className="chip">Holding the cards</span> : null}</li>)}</ol>
+            <ol className="order-list">{ordered.map(p => <li key={p.id} className={p.isLoser || p.forfeit ? 'lost' : undefined}><span className="num rank">{ordinal(p.place)}</span><Avatar person={p} size="sm" /><span>{nameIn(p)}</span>{p.isLoser ? <span className="chip">Holding the cards</span> : null}{leftChip(p)}{deltaOf(p) != null ? <span className={'delta num ' + (deltaOf(p) >= 0 ? 'up' : 'down')}>{(deltaOf(p) >= 0 ? '+' : '') + deltaOf(p)}</span> : null}</li>)}</ol>
           </section>
           <section className="panel lobby-chat"><Chat code={table.code} messages={chat} you={you} idSuffix="results" /></section>
         </aside>

@@ -111,7 +111,7 @@
 .pcard.back-only .pcard-back { transform: none; }
 
 /* ---------- Interaction states (hand) ---------- */
-.hand .pcard { cursor: pointer; transition: transform var(--t-med) var(--ease-out), filter var(--t-med), margin var(--t-med) var(--ease-out); }
+.hand .pcard { cursor: var(--cursor-pointer); transition: transform var(--t-med) var(--ease-out), filter var(--t-med), margin var(--t-med) var(--ease-out); }
 .hand .pcard .pcard-face { transition: box-shadow var(--t-med); }
 .hand .pcard.is-playable:hover, .hand .pcard.is-playable:focus-visible { transform: translateY(-14px); }
 .hand .pcard.is-playable:hover .pcard-face { box-shadow: var(--sh-card-lift), inset 0 0 0 1px rgba(120,90,40,.22); }

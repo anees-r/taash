@@ -12,7 +12,6 @@ export const metadata = {
   title: { default: 'Taash', template: '%s · Taash' },
   description: 'Taash — traditional card games with friends. First table: Thulla.',
   metadataBase: new URL(process.env.APP_URL || 'http://localhost:3000'),
-  icons: { icon: '/icon.svg' },
 };
 
 export const viewport = { width: 'device-width', initialScale: 1, viewportFit: 'cover', themeColor: '#120e1f' };
@@ -27,9 +26,9 @@ export default async function RootLayout({ children }) {
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
         {/* eslint-disable-next-line @next/next/no-page-custom-font */}
         <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rozha+One&family=Hanken+Grotesk:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&family=Libre+Caslon+Text:wght@400;700&display=swap" />
-        {/* Only the glyphs for تاش and تھلا */}
+        {/* Only the glyphs for تاش and ٹھلا */}
         {/* eslint-disable-next-line @next/next/no-page-custom-font */}
-        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu:wght@500&text=%D8%AA%D8%A7%D8%B4%D8%AA%DA%BE%D9%84%D8%A7%20&display=swap" />
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu:wght@500&text=%D8%AA%D8%A7%D8%B4%D9%B9%DA%BE%D9%84%D8%A7%20&display=swap" />
       </head>
       <body>
         <Sprite />

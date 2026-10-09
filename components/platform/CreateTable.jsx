@@ -9,6 +9,7 @@ import { useRouter } from 'next/navigation';
 import { Modal } from './Modal';
 import { Icon } from './Icon';
 import { Avatar } from './Avatar';
+import { TableOptions, defaultOptions } from './TableOptions';
 import { useViewer } from './Providers';
 import { clientGames } from '@/games/client-registry';
 import { gameMeta } from '@/games/catalog';
@@ -16,23 +17,24 @@ import { call, resetSocket } from '@/lib/client/socket';
 import { setGuestName } from '@/lib/client/guest';
 import { toast } from '@/lib/client/toast';
 
-export function CreateTableButton({ gameId = 'thulla', className = 'btn btn-primary', children = 'Create table', autoFocus }) {
+export function CreateTableButton({ gameId = 'thulla', className = 'btn btn-primary', children = 'Create table', autoFocus, visibility }) {
   const [open, setOpen] = useState(false);
   return (
     <>
       <button type="button" className={className} data-autofocus={autoFocus ? true : undefined} onClick={() => setOpen(true)}>{children}</button>
-      {open ? <CreateTableModal gameId={gameId} onClose={() => setOpen(false)} /> : null}
+      {open ? <CreateTableModal gameId={gameId} visibility={visibility} onClose={() => setOpen(false)} /> : null}
     </>
   );
 }
 
-function CreateTableModal({ gameId, onClose }) {
+function CreateTableModal({ gameId, visibility, onClose }) {
   const viewer = useViewer();
   const router = useRouter();
   const game = clientGames[gameId];
   const meta = gameMeta(gameId);
   const [settings, setSettings] = useState(game.defaultSettings());
   const [valid, setValid] = useState(true);
+  const [options, setOptions] = useState(() => ({ ...defaultOptions(), ...(visibility ? { visibility } : {}) }));
   const [name, setName] = useState(viewer.kind === 'guest' ? viewer.name : '');
   const [nameErr, setNameErr] = useState(null);
   const [err, setErr] = useState(null);
@@ -49,7 +51,7 @@ function CreateTableModal({ gameId, onClose }) {
       if (viewer.kind !== 'guest' || viewer.name !== name.trim()) resetSocket();
     }
     setBusy(true);
-    const res = await call('table:create', { gameId, settings });
+    const res = await call('table:create', { gameId, settings, options });
     setBusy(false);
     if (res.error) { setErr(res.error); return; }
     onClose();
@@ -76,6 +78,7 @@ function CreateTableModal({ gameId, onClose }) {
       ) : (
         <div className="host-line"><Avatar person={{ name: viewer.name }} size="sm" /><span>Hosting as <b>{viewer.name}</b></span><span className="chip chip-gold"><Icon id="i-crown" />Host</span></div>
       )}
+      <TableOptions value={options} onChange={setOptions} guestHost={needsName} />
       <game.SettingsForm value={settings} onChange={(s, ok) => { setSettings(s); setValid(ok); }} />
     </Modal>
   );

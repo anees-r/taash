@@ -1,37 +1,48 @@
 'use client';
-/* Edit profile (display name), change password, sign out everywhere. */
+/* Edit profile (display name, username), change password, sign out everywhere. */
 import { useActionState, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Modal } from './Modal';
 import { Icon } from './Icon';
+import { HandleField } from './HandleField';
 import { updateProfileAction, changePasswordAction, signOutEverywhereAction } from '@/app/actions/auth';
 import { resetSocket } from '@/lib/client/socket';
 import { toast } from '@/lib/client/toast';
 
-export function OwnProfileActions({ name }) {
+export function OwnProfileActions({ name, handle }) {
   const [open, setOpen] = useState(false);
   return (
     <>
       <Link className="btn" href="/friends"><Icon id="i-users" />Friends</Link>
       <button type="button" className="btn btn-ghost" onClick={() => setOpen(true)}>Edit profile</button>
-      <EditProfile open={open} name={name} onClose={() => setOpen(false)} />
+      <EditProfile open={open} name={name} handle={handle} onClose={() => setOpen(false)} />
     </>
   );
 }
 
-function EditProfile({ open, name, onClose }) {
+function EditProfile({ open, name, handle, onClose }) {
   const router = useRouter();
   const [state, action, pending] = useActionState(updateProfileAction, null);
   const [pw, pwAction, pwPending] = useActionState(changePasswordAction, null);
-  useEffect(() => { if (state?.ok) { toast('Profile saved'); resetSocket(); router.refresh(); onClose(); } }, [state]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!state?.ok) return;
+    toast('Profile saved');
+    resetSocket();
+    if (state.handle && state.handle !== handle && location.pathname.startsWith('/u/')) router.replace('/u/' + state.handle);
+    router.refresh(); onClose();
+  }, [state]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
-    <Modal open={open} onClose={onClose} title="Edit profile" subtitle="Your display name shows at tables, in chat and on leaderboards.">
-      <form action={action} className="field" style={{ gap: 10 }}>
-        <label htmlFor="pf-name">Display name</label>
-        <input className={'input' + (state?.error ? ' invalid' : '')} id="pf-name" name="name" defaultValue={name} maxLength={24} required data-autofocus />
+    <Modal open={open} onClose={onClose} title="Edit profile" subtitle="Your display name shows at tables, in chat and on leaderboards. Your username is how friends find you, and you can sign in with it.">
+      <form action={action} className="profile-form">
+        <div className="field">
+          <label htmlFor="pf-name">Display name</label>
+          <input className={'input' + (state?.field === 'name' ? ' invalid' : '')} id="pf-name" name="name" defaultValue={name} maxLength={24} required data-autofocus />
+        </div>
+        <HandleField id="pf-handle" defaultValue={handle} current={handle} error={state?.field === 'handle' ? state.error : null}
+          hint="Letters, numbers, dots and underscores. Friends add you by @username." />
         {state?.error ? <span className="error" role="alert">{state.error}</span> : null}
-        <div><button className="btn btn-primary" type="submit" disabled={pending}>Save name</button></div>
+        <div><button className="btn btn-primary" type="submit" disabled={pending}>{pending ? 'Saving…' : 'Save profile'}</button></div>
       </form>
       <hr className="divider" />
       <form action={pwAction} className="field" style={{ gap: 10 }}>

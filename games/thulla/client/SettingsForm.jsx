@@ -98,7 +98,7 @@ export function SettingsForm({ value: s, onChange, minPlayers = LIMITS.playersMi
       <div className="setting">
         <div className="setting-text"><span className="field-label">When a turn runs out</span><p className="hint">The same rule for everyone, applied by the server.</p></div>
         <div className="setting-control">
-          <span className="hint">The highest card you are allowed to play is played for you — a Thulla with your highest card if you are out of the shape. An unanswered hand request counts as <b>Keep</b>. Miss three turns in a row and you are marked away; your turns are then played straight away until you come back.</span>
+          <span className="hint">The server plays a sensible card for you, the way a careful player would: it avoids leading a shape someone has given Thulla on, ducks under a likely Thulla, and throws a high card when you are out of the shape. An unanswered hand request counts as <b>Keep</b>. Miss three turns in a row and you are marked away; your turns are then played straight away until you come back.</span>
         </div>
       </div>
     </div>

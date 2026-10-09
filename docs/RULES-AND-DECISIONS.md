@@ -29,17 +29,47 @@ The engine is `games/thulla/engine/rules.js` (pure, deterministic once shuffled)
 
 ## Timeout and away policy *(confirmed)*
 
-When a turn's time runs out, the server plays **the highest-ranked legal card**. When following and holding the shape, that is the highest card of the shape. When void in the shape, every card is legal, so it is a **Thulla with the highest card in hand**. When leading, it is the highest card in hand; equal ranks are broken by suit order ♠ ♥ ♦ ♣. In the first baari, the A♠ is the only legal opener. The server never makes a request on a player's behalf.
+When a turn's time runs out (or the player is away or has left), the server plays the card a **steady** player would choose (`games/thulla/engine/strategy.js`, see Bots below). It only uses public information: the player's own hand and every card played so far. In the first baari, the A♠ is the only legal opener. The server never makes a request on a player's behalf.
+
+*(Changed: this used to be "the highest legal card", which kept leading a shape someone had already given Thulla on.)*
 
 **Three consecutive turn timeouts** mark the player **away**. Away players' turns are played automatically after a short pause (1.2 s, so others can follow), and requests sent to them are kept. Playing a card, answering a request, or pressing **I'm back** clears away. Leaving a game mid-way marks the player away immediately. Their seat stays, so the game always finishes.
 
-If **everyone** at a table disconnects, the clock pauses instead of auto-playing to an empty room. It resumes when someone returns. After 10 minutes with nobody connected, the table closes without saving a result.
+## Leaving a game
+
+- **One player leaves while holding cards:** they **forfeit**. The game goes on (their turns are auto-played), they rank below everyone who stayed, and they take the largest rating loss (see Ratings). Players who stayed are scored on how they played, as usual.
+- **Dropping off counts as leaving** if the player is still disconnected 30 s after the game ends. Coming back before the end (opening the table again) cancels the forfeit.
+- **Leaving after going out** (no cards left) is not a forfeit.
+- **Only one player still in:** the clock pauses for 20 s. If nobody comes back, the game ends early: the remaining player finishes ahead of the leavers and nobody is "left holding the cards".
+- **Everyone leaves** (including the last player during that pause): the game ends there and **everyone who left while holding cards forfeits** and loses rating.
+- **Everyone disconnects** without leaving: the clock pauses instead of auto-playing to an empty room. It resumes when someone returns. After 10 minutes with nobody back, the game ends with everyone still holding cards forfeiting, and the table closes.
+
+## Table options
+
+- **Ranked / unranked** (default ranked). Unranked games are saved to history but never change ratings, streaks or leaderboard counts.
+- **Public / private** (default private). Public tables with a free seat are listed under **Open rooms** (home, Thulla and Join pages, refreshed every 5 s) for anyone to join. Private tables are joined by code, link or invite.
+- The host can change both in the lobby; they are locked during a game.
+
+## Bots
+
+- **Unranked tables only.** The host adds bots from the lobby (an empty seat's **Bot** button, or **Add a bot**). A table with bots cannot be switched to ranked; remove them first. Bots are always ready, never leave, and never keep a table open on their own.
+- **No AI.** Bots follow the rules with a fixed strategy and remember every card played. They never see another player's hand.
+  - **Enforced, not promised:** the strategy is never given the game state. The server builds a *seat view* (`seatView()` in `engine/strategy.js`): the bot's own hand plus what everyone at the table sees (cards played, Thulla history, hand sizes, cleared counts). A test re-deals the other players' cards at random at over a thousand decision points and checks the view, and so the bot's choice, never changes.
+  - **Leading:** avoid any shape an active opponent has given Thulla on (they are out of it, so the leader would likely collect). Prefer shapes with plenty of cards still out. Shed the highest card when that shape looks safe; otherwise lead low.
+  - **Following:** if someone already played higher, or nobody left to play can Thulla, shed the highest card. If a Thulla looks likely, duck under the current highest; if forced over it, play the lowest.
+  - **Out of the shape:** throw the highest card, preferring a short shape so it runs out sooner.
+  - **Requests:** bots never ask for a hand and always give theirs when asked (giving finishes them).
+- **Personalities:** Bashir Chacha (cautious), Rani Apa (sharp), Pappu (reckless: sometimes forgets who is out of a shape, takes bigger risks) and Nano (steady). They "think" for about a second before playing.
+- **Chat:** each bot has hand-written lines for the start of a game, giving Thulla, picking up a pile, going out and losing, and answers a hello. At most one line per bot every few seconds.
 
 ## Ratings and streaks
 
-- **Method:** pairwise Elo across the finishing order. Each registered player is compared with every other player in the game: finishing ahead scores 1, behind 0. Expected score is `1 / (1 + 10^((Rb − Ra) / 400))`. The delta is `round(K / (n − 1) × Σ(score − expected))` with K = 32. Everyone starts at 1500.
+- **Method:** pairwise Elo across the finishing order, weighted by margin. Each registered player is compared with every other player in the game: finishing ahead scores 1, behind 0. Expected score is `1 / (1 + 10^((Rb − Ra) / 400))`. Each pair is weighted by `1 + gap`, where `gap` is how many baaris apart the two finished as a share of the whole game (a player still holding cards counts as finishing in the last baari). The delta is `round(K / (n − 1) × Σ weight × (score − expected))` with K = 32. Everyone starts at 1500.
+- **Going out early pays:** finishing in the same baari as someone is a plain win (×1); going out at the very start while they hold cards to the end counts double (×2). Both sides of a pair use the same weight, so it stays zero-sum.
+- **Forfeits:** a player who left loses every pair at the full ×2 weight, against everyone (other leavers included, so a table that all walks out all goes down: −32 at equal ratings). Players who stayed beat a leaver as an ordinary win, weighted by how early they went out. A forfeit also counts as a loss for streaks.
+- **Unranked games** change nothing.
 - **Guests** count as 1500-rated opponents and are never rated.
-- With equal ratings at a 4-player table, the results are +16, +5, −5 and −16.
+- With equal ratings at a 4-player table where everyone goes out in the same baari, the results are +16, +5, −5 and −16. Wider margins move up to twice as much.
 - **Winning streak** = consecutive 1st places; **losing streak** = consecutive games left holding the cards.
 - **Exactly once:** keyed by the match id (chosen at game start) and the `rating_events (match_id, user_id)` primary key, inside one transaction. The client never sends results or ratings.
 

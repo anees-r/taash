@@ -16,7 +16,7 @@ export default async function ProfilePage() {
   ]);
   return (
     <AppShell>
-      <ProfileView user={{ ...user, online: true }} rating={rating} change={change} history={history} trend={trend} friendsCount={friends.length} own actions={<OwnProfileActions name={user.name} />} />
+      <ProfileView user={{ ...user, online: true }} rating={rating} change={change} history={history} trend={trend} friendsCount={friends.length} own actions={<OwnProfileActions name={user.name} handle={user.handle} />} />
     </AppShell>
   );
 }

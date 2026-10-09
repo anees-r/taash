@@ -5,7 +5,7 @@ import { useActionState, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Avatar } from './Avatar';
 import { Icon } from './Icon';
-import { Modal } from './Modal';
+import { Confirm, Modal } from './Modal';
 import { Segmented } from './controls';
 import { CreateTableButton } from './CreateTable';
 import { addFriendAction, respondAction, cancelAction, removeFriendAction } from '@/app/actions/friends';
@@ -17,6 +17,8 @@ export function FriendsView({ friends, incoming, outgoing, myTable }) {
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState('all');
   const [adding, setAdding] = useState(false);
+  // Kept after closing so the dialog text doesn't blank out during the exit animation.
+  const [removing, setRemoving] = useState({ open: false, friend: null, busy: false });
   const rows = friends
     .filter(f => (filter === 'all' || f.online) && (!q || f.name.toLowerCase().includes(q) || f.handle.toLowerCase().includes(q)))
     .sort((a, b) => (b.online - a.online) || a.name.localeCompare(b.name));
@@ -25,6 +27,20 @@ export function FriendsView({ friends, incoming, outgoing, myTable }) {
     if (!myTable) return;
     const res = await call('table:invite', { code: myTable, userIds: [f.id] });
     toast(res.error || (res.sent ? 'Invite sent to ' + firstName(f.name) : firstName(f.name) + ' could not be invited.'), { icon: res.error ? 'i-info' : 'i-send' });
+  }
+
+  async function confirmRemove() {
+    const f = removing.friend;
+    setRemoving(r => ({ ...r, busy: true }));
+    const fd = new FormData();
+    fd.set('userId', f.id);
+    try {
+      await removeFriendAction(fd);
+      toast(f.name + ' is no longer your friend.', { icon: 'i-users' });
+    } catch {
+      toast('Could not remove ' + firstName(f.name) + '. Try again.', { icon: 'i-info' });
+    }
+    setRemoving(r => ({ ...r, open: false, busy: false }));
   }
 
   return (
@@ -61,7 +77,7 @@ export function FriendsView({ friends, incoming, outgoing, myTable }) {
               {myTable
                 ? <button type="button" className="btn btn-sm" onClick={() => invite(f)}>Invite to {myTable}</button>
                 : <CreateTableButton className="btn btn-sm">Invite to a table</CreateTableButton>}
-              <form action={removeFriendAction}><input type="hidden" name="userId" value={f.id} /><button className="icon-btn" type="submit" aria-label={'Remove ' + f.name + ' from friends'} title="Remove friend"><Icon id="i-x" /></button></form>
+              <button className="icon-btn" type="button" onClick={() => setRemoving({ open: true, friend: f, busy: false })} aria-label={'Remove ' + f.name + ' from friends'} title="Remove friend"><Icon id="i-x" /></button>
             </li>
           ))}
           {!rows.length ? <li className="invite-empty"><p className="muted">{friends.length ? 'No friends match.' : 'No friends yet. Add someone by their @handle.'}</p></li> : null}
@@ -80,6 +96,18 @@ export function FriendsView({ friends, incoming, outgoing, myTable }) {
         </section>
       ) : null}
       <AddFriend open={adding} onClose={() => setAdding(false)} />
+      <Confirm open={removing.open} danger busy={removing.busy}
+        title={removing.friend ? 'Remove ' + removing.friend.name + '?' : ''}
+        confirmLabel={removing.busy ? 'Removing…' : 'Remove friend'} cancelLabel="Keep"
+        onCancel={() => { if (!removing.busy) setRemoving(r => ({ ...r, open: false })); }} onConfirm={confirmRemove}>
+        {removing.friend ? (
+          <div className="friend" style={{ marginBottom: 12 }}>
+            <Avatar person={removing.friend} />
+            <div><b>{removing.friend.name}</b><span className="faint">@{removing.friend.handle}</span></div>
+          </div>
+        ) : null}
+        <p className="muted">You’ll be removed from each other’s friends lists, and you won’t be able to invite each other to tables. You can send a new friend request any time.</p>
+      </Confirm>
     </main>
   );
 }

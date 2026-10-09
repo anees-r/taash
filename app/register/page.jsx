@@ -21,7 +21,6 @@ export default async function RegisterPage({ searchParams }) {
               <li>Your finishing history and streaks.</li>
               <li>Friends, invitations and leaderboards.</li>
             </ul>
-            <p className="muted small">Your password is stored only as an Argon2 hash.</p>
           </aside>
         </div>
       </main>

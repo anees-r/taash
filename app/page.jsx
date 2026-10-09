@@ -6,9 +6,10 @@ import { Icon } from '@/components/platform/Icon';
 import { PlayingCard } from '@/components/game/PlayingCard';
 import { MiniTable } from '@/components/platform/MiniTable';
 import { CreateTableButton } from '@/components/platform/CreateTable';
+import { OpenRooms } from '@/components/platform/OpenRooms';
 import { getViewer } from '@/lib/auth/viewer';
 import { getRating, ratingChange30d, listFriends, leaderboard, recentMatches, getUser } from '@/lib/db/social';
-import { isOnline } from '@/lib/server/live';
+import { isOnline, publicTables } from '@/lib/server/live';
 import { catalog } from '@/games/catalog';
 import { plural, timeAgo, firstName, monthYear } from '@/lib/client/format';
 
@@ -101,6 +102,7 @@ export default async function Home() {
                 </div>
               </div>
             </article>
+            <OpenRooms initial={publicTables()} />
             <section className="workshop">
               <div className="section-head"><h2 className="section-title">In the workshop</h2><p className="muted">More games are being built for Taash. None of these can be played yet, and each will get its own rating when it opens.</p></div>
               <div className="workshop-grid">

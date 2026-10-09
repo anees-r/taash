@@ -7,6 +7,9 @@ import { Avatar } from './Avatar';
 import { Modal, Confirm } from './Modal';
 import { Crumbs, Segmented, Note } from './controls';
 import { Chat } from './Chat';
+import { TableOptions, OptionChips, defaultOptions } from './TableOptions';
+import { BOT_BY_ID } from '@/games/thulla/bots';
+import { PERSONALITIES } from '@/games/thulla/engine/strategy';
 import { Guide } from '@/games/thulla/client/Guide';
 import { clientGames } from '@/games/client-registry';
 import { gameMeta } from '@/games/catalog';
@@ -31,6 +34,8 @@ export function LobbyView({ table, you, viewerKind, chat, appUrl, onLeft, onShow
   const [rules, setRules] = useState(false);
   const [kick, setKick] = useState(null);
   const [leaving, setLeaving] = useState(false);
+  const unranked = table.options?.ranked === false;
+  const canBots = isHost && unranked && table.status !== 'playing';
   const link = appUrl + '/t/' + table.code;
 
   let note;
@@ -56,11 +61,26 @@ export function LobbyView({ table, you, viewerKind, chat, appUrl, onLeft, onShow
           <span className="seat-no num">Seat {i + 1}</span>
           <div className="empty-ring"><Icon id="i-plus" /></div>
           <b>Open seat</b><span className="faint">Waiting for a player</span>
-          {viewerKind === 'user' ? <button type="button" className="btn btn-sm" onClick={() => setInviting(true)}>Invite</button> : <button type="button" className="btn btn-sm" onClick={() => setSharing(true)}>Share</button>}
+          <div className="row-gap">
+            {viewerKind === 'user' ? <button type="button" className="btn btn-sm" onClick={() => setInviting(true)}>Invite</button> : <button type="button" className="btn btn-sm" onClick={() => setSharing(true)}>Share</button>}
+            {canBots ? <button type="button" className="btn btn-sm btn-ghost" disabled={busy} onClick={() => act('table:addBot', {})}><Icon id="i-bolt" />Bot</button> : null}
+          </div>
         </li>);
       continue;
     }
     const isHostP = p.id === table.hostId, isMe = p.id === you;
+    if (p.bot) {
+      const b = BOT_BY_ID[p.bot];
+      grid.push(
+        <li key={p.id} className="seat-card is-bot" data-player={p.id}>
+          <span className="seat-no num">Seat {i + 1}</span>
+          <Avatar person={p} size="lg" status="on" />
+          <b className="seat-pname">{p.name}</b>
+          <div className="seat-tags"><span className="chip chip-mist"><Icon id="i-bolt" />Bot</span><span className="chip">{PERSONALITIES[b?.persona]?.label || 'Steady'}</span></div>
+          {isHost ? <button type="button" className="icon-btn seat-x" aria-label={'Remove ' + p.name + ' from the table'} title="Remove bot" onClick={() => act('table:kick', { playerId: p.id }, p.name + ' left the table')}><Icon id="i-x" /></button> : null}
+        </li>);
+      continue;
+    }
     const st = isHostP ? { t: 'Host', c: 'host', ic: 'i-crown' } : p.ready ? { t: 'Ready', c: 'ready', ic: 'i-check' } : { t: 'Not ready yet', c: 'waiting', ic: 'i-clock' };
     grid.push(
       <li key={p.id} className={'seat-card' + (isHostP ? ' is-host' : '') + (isMe ? ' is-me' : '')} data-player={p.id}>
@@ -78,6 +98,7 @@ export function LobbyView({ table, you, viewerKind, chat, appUrl, onLeft, onShow
         <div className="lh-left">
           <Crumbs items={[{ label: 'Games', href: '/' }, { label: meta.name, href: '/games/' + meta.id }, { label: 'Lobby' }]} />
           <h1 className="page-title">{meta.name} table</h1>
+          <div className="row-gap lobby-chips"><OptionChips options={table.options} /></div>
           <p className="muted">Hosted by <b className="host-name">{isHost ? 'you' : host?.name}</b> · <span className="seat-sum num">{table.players.length} of {seats} seats taken</span></p>
         </div>
         <div className="code-card">
@@ -93,7 +114,12 @@ export function LobbyView({ table, you, viewerKind, chat, appUrl, onLeft, onShow
       <div className="lobby-grid">
         <div className="lobby-main">
           <section className="panel panel-pad seats-panel">
-            <div className="section-head row"><h2 className="section-title">At the table</h2><div className="row-gap">{viewerKind === 'user' ? <button type="button" className="btn btn-primary" onClick={() => setInviting(true)}><Icon id="i-users" />Invite friends</button> : null}</div></div>
+            <div className="section-head row"><h2 className="section-title">At the table</h2><div className="row-gap">
+              {canBots && table.players.length < seats ? <button type="button" className="btn" disabled={busy} onClick={() => act('table:addBot', {})}><Icon id="i-bolt" />Add a bot</button> : null}
+              {viewerKind === 'user' ? <button type="button" className="btn btn-primary" onClick={() => setInviting(true)}><Icon id="i-users" />Invite friends</button> : null}
+            </div></div>
+            {isHost && !unranked && table.players.length < seats ? <p className="hint">Short of players? Make the table <b>unranked</b> in Table rules → Edit to fill seats with bots.</p> : null}
+            {table.players.some(p => p.bot) ? <p className="hint">Bots follow the rules and remember every card played. They never see anyone’s hand.</p> : null}
             <ol className="seat-grid" aria-label="Seats">{grid}</ol>
           </section>
           <section className="start-panel">
@@ -109,7 +135,11 @@ export function LobbyView({ table, you, viewerKind, chat, appUrl, onLeft, onShow
         <div className="lobby-side">
           <section className="panel panel-pad settings-panel">
             <div className="section-head row"><h2 className="section-title">Table rules</h2>{isHost ? <button type="button" className="btn btn-sm btn-ghost" onClick={() => setEditing(true)}><Icon id="i-sliders" />Edit</button> : null}</div>
-            <div className="kv-grid">{game.settingsSummary(table.settings).map(r => <div key={r.label} className="kv"><span className="faint">{r.label}</span><b>{r.value}</b></div>)}</div>
+            <div className="kv-grid">
+              <div className="kv"><span className="faint">Rating</span><b>{table.options?.ranked === false ? 'Unranked — ratings don’t change' : 'Ranked'}</b></div>
+              <div className="kv"><span className="faint">Who can join</span><b>{table.options?.visibility === 'public' ? 'Public — listed in Open rooms' : 'Private — code or invite'}</b></div>
+              {game.settingsSummary(table.settings).map(r => <div key={r.label} className="kv"><span className="faint">{r.label}</span><b>{r.value}</b></div>)}
+            </div>
             <button type="button" className="btn btn-sm btn-ghost" onClick={() => setRules(true)}><Icon id="i-book" />How to play</button>
           </section>
           <section className="panel lobby-chat"><Chat code={table.code} messages={chat} you={you} idSuffix="lobby" /></section>
@@ -136,17 +166,19 @@ function testDeal() {
 function EditSettings({ table, onClose }) {
   const game = clientGames[table.gameId];
   const [s, setS] = useState({ ...table.settings });
+  const [o, setO] = useState({ ...defaultOptions(), ...table.options });
   const [valid, setValid] = useState(true);
   const [err, setErr] = useState(null);
   async function save() {
     if (s.players < table.players.length) { setErr(plural(table.players.length, 'player is', 'players are') + ' already seated. Remove players before lowering the seat count to ' + s.players + '.'); return; }
-    const r = await call('table:settings', { code: table.code, settings: s });
+    const r = await call('table:settings', { code: table.code, settings: s, options: o });
     if (r.error) { setErr(r.error); return; }
     toast('Settings saved'); onClose();
   }
   return (
     <Modal open onClose={onClose} wide eyebrow={'Table ' + table.code} title="Table settings"
       footer={<><button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button><button type="button" className="btn btn-primary" disabled={!valid} onClick={save}>Save settings</button></>}>
+      <TableOptions value={o} onChange={next => { setO(next); setErr(null); }} />
       <game.SettingsForm value={s} minPlayers={table.players.length} onChange={(next, ok) => { setS(next); setValid(ok); setErr(null); }} />
       {err ? <p className="error" role="alert" style={{ color: 'var(--rose-300)', fontSize: 'var(--fs-xs)', fontWeight: 600 }}>{err}</p> : null}
     </Modal>

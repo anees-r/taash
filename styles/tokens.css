@@ -59,6 +59,8 @@
   --surface-2: rgba(58, 44, 92, .55);
   --surface-solid: #1f1836;
   --focus: var(--gold-300);
+  --cursor: url("/cursors/arrow.svg") 3 2, default;
+  --cursor-pointer: url("/cursors/pointer.svg") 3 2, pointer;
 
   /* Type */
   --font-display: "Rozha One", "Bodoni 72", "Didot", Georgia, serif;
