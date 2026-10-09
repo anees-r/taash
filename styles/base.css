@@ -287,7 +287,7 @@ input[type="range"] { width: 100%; accent-color: var(--gold-400); }
   .page { padding-top: var(--sp-6); }
   .modal-head, .modal-body, .modal-foot { padding-left: var(--sp-4); padding-right: var(--sp-4); }
   .bottom-nav { display: flex; }
-  .app.has-bottom-nav .page { padding-bottom: 96px; }
+  .app.has-bottom-nav .site-footer { padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }   /* clear the fixed bottom nav */
 }
 .bottom-nav {
   display: none; position: fixed; z-index: 30; left: 0; right: 0; bottom: 0;
@@ -312,3 +312,10 @@ input[type="range"] { width: 100%; accent-color: var(--gold-400); }
 .handle-status .ok svg { width: 14px; height: 14px; }
 .handle-status .error { color: var(--rose-300); font-weight: 600; }
 .profile-form { display: grid; gap: 14px; }
+
+/* Footer */
+.site-footer { margin-top: auto; padding: var(--sp-5) var(--sp-4) var(--sp-6); border-top: 1px solid var(--line); text-align: center; font-size: var(--fs-xs); color: var(--fg-faint); }
+.site-footer p { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 4px 6px; }
+.site-footer a { color: var(--fg-muted); font-weight: 700; text-decoration: none; }
+.site-footer a:hover { color: var(--gold-300); text-decoration: underline; text-underline-offset: 3px; }
+.sf-dot { opacity: .5; }

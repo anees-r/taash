@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { SiteFooter } from './SiteFooter';
 import { TopBar, BottomNav } from './TopBar';
 import { JoinForm } from './JoinForm';
 import { LobbyView } from './LobbyView';
@@ -174,6 +175,7 @@ function Chrome({ rating, children }) {
     <div className="app has-bottom-nav">
       <TopBar viewer={viewer} rating={rating} />
       {children}
+      <SiteFooter />
       <BottomNav />
     </div>
   );
