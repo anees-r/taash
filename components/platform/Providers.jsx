@@ -5,7 +5,7 @@
  */
 import { createContext, useContext, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { getSocket } from '@/lib/client/socket';
+import { getSocket, setSocketIdentity } from '@/lib/client/socket';
 import { toast } from '@/lib/client/toast';
 
 const ViewerCtx = createContext({ kind: 'anon' });
@@ -13,6 +13,7 @@ export const useViewer = () => useContext(ViewerCtx);
 
 export function Providers({ viewer, children }) {
   const router = useRouter();
+  if (typeof window !== 'undefined') setSocketIdentity(viewer.playerId || 'anon');
   useEffect(() => {
     if (viewer.kind !== 'user') return;                // guests connect only when they sit at a table
     const s = getSocket();

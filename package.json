@@ -17,7 +17,8 @@
     "test": "cross-env LOG_LEVEL=warn node --test --test-reporter=spec \"tests/unit/**/*.test.js\"",
     "test:integration": "cross-env LOG_LEVEL=warn node --test --test-concurrency=1 --test-reporter=spec \"tests/integration/**/*.test.js\"",
     "test:e2e": "playwright test",
-    "test:all": "npm test && npm run test:integration && npm run test:e2e"
+    "test:all": "npm test && npm run test:integration && npm run test:e2e",
+    "soak": "cross-env LOG_LEVEL=warn node --expose-gc scripts/soak.js"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.11.3",

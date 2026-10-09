@@ -223,3 +223,18 @@ test('default crypto rng produces values in [0, 1)', () => {
   const m = new TableManager({ games: { thulla }, transport: fakeTransport() });
   for (let i = 0; i < 1000; i++) { const v = m.rng(); assert.ok(v >= 0 && v < 1); }
 });
+
+test('host who left mid-game: hosting passes on at the end; departed players free their seats', async () => {
+  const code = seatAll({ ...defaultSettings(), players: 4, turnSeconds: 5, pileSeconds: 1 });
+  tm.start(H, code);
+  const t = tm.get(code);
+  tm.leave(H, code);
+  tm.leave(C, code);
+  for (let i = 0; i < 4000 && t.status === 'playing'; i++) mock.timers.tick(1000);
+  assert.strictEqual(t.status, 'finished');
+  assert.notStrictEqual(t.hostId, H.playerId);
+  assert.ok([A.playerId, B.playerId].includes(t.hostId));
+  mock.timers.tick(LIMITS.lobbyGraceMs + 10);
+  assert.deepStrictEqual(t.players.map(p => p.id).sort(), [A.playerId, B.playerId].sort());
+  assert.ok(tm.start(tm.seatOf(t, t.hostId) && [A, B].find(p => p.playerId === t.hostId), code).ok);
+});

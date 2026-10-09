@@ -36,8 +36,8 @@ export async function joinAsGuest(page, code, name) {
 }
 
 /** One step of a simple automatic player for this page. Returns what it did. */
-export async function step(page, { give = null } = {}) {
-  return page.evaluate(({ give }) => {
+export async function step(page, { give = null, stopAtRequest = false } = {}) {
+  return page.evaluate(({ give, stopAtRequest }) => {
     const modal = [...document.querySelectorAll('.modal')].find(m => /asks for your hand/.test(m.textContent));
     if (modal) {
       const b = [...modal.querySelectorAll('button')].find(x => (give ? /^Give/ : /^Keep/).test(x.textContent));
@@ -45,11 +45,13 @@ export async function step(page, { give = null } = {}) {
       return 'wait';
     }
     if (!document.querySelector('.tt-dock.my-turn')) return document.querySelector('.results-page') ? 'done' : 'wait';
+    const req = [...document.querySelectorAll('.dock-main .btn')].find(b => !b.hidden && /Request/.test(b.textContent));
+    if (req && stopAtRequest) return 'request';
     const c = document.querySelector('.hand .pcard.is-playable');
     if (!c) return 'wait';
     c.click(); c.click();
     return 'played';
-  }, { give });
+  }, { give, stopAtRequest });
 }
 
 /** Drive every page until all show results. */

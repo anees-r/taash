@@ -1,0 +1,39 @@
+# Local development on Windows/macOS/Linux with Docker Desktop.
+#   docker compose up -d db          → just PostgreSQL (then run `npm run dev`)
+#   docker compose --profile app up  → PostgreSQL + the production container
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: taash
+      POSTGRES_PASSWORD: taash
+      POSTGRES_DB: taash
+    ports:
+      - "5432:5432"
+    volumes:
+      - taash-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U taash -d taash"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    profiles: ["app"]
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgres://taash:taash@db:5432/taash
+      APP_URL: http://localhost:3000
+      AUTH_URL: http://localhost:3000
+      AUTH_SECRET: change-me-to-a-long-random-string-0123456789
+      AUTH_TRUST_HOST: "true"
+      DB_POOL_MAX: "8"
+
+volumes:
+  taash-db:

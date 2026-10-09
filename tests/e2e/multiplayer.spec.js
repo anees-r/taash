@@ -50,7 +50,7 @@ test('accepted hand request: the whole table sees exactly the transferred cards,
     for (const p of pages) {
       if (await p.locator('.dock-main .btn:not([hidden])', { hasText: 'Request' }).isVisible().catch(() => false)) { requester = p; break; }
     }
-    if (!requester) { for (const p of pages) await step(p); await host.waitForTimeout(100); }
+    if (!requester) { for (const p of pages) if ((await step(p, { stopAtRequest: true })) === 'request') { requester = p; break; } await host.waitForTimeout(100); }
   }
   expect(requester, 'a leader got the chance to request').toBeTruthy();
   await requester.locator('.dock-main .btn', { hasText: 'Request' }).click();
@@ -93,7 +93,7 @@ test('a refused request transfers nothing and shows no reveal', async ({ browser
   let requester = null;
   for (let i = 0; i < 400 && !requester; i++) {
     for (const p of pages) if (await p.locator('.dock-main .btn:not([hidden])', { hasText: 'Request' }).isVisible().catch(() => false)) { requester = p; break; }
-    if (!requester) { for (const p of pages) await step(p); await host.waitForTimeout(100); }
+    if (!requester) { for (const p of pages) if ((await step(p, { stopAtRequest: true })) === 'request') { requester = p; break; } await host.waitForTimeout(100); }
   }
   test.skip(!requester, 'game ended before a request was possible');
   const target = requester === host ? a : host;
@@ -137,4 +137,15 @@ test('a table is limited to its seat count; bad codes explain themselves', async
   await b.fill('#join-name', 'Benish');
   await b.click('button[type=submit]');
   await expect(b.getByText(/No open table uses the code ZZZ-999/)).toBeVisible();
+});
+
+test('with reduced motion the game still runs to the end', async ({ browser }) => {
+  const mk = async () => { const c = await browser.newContext({ reducedMotion: 'reduce', viewport: { width: 1024, height: 768 } }); await c.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort()); const p = await c.newPage(); p.errors = []; p.on('pageerror', e => p.errors.push(e.message)); return p; };
+  const host = await mk();
+  const code = await createTable(host, { name: 'Hira', cardsEach: 3, players: 2 });
+  const a = await mk();
+  await joinAsGuest(a, code, 'Asad');
+  await host.getByRole('button', { name: 'Start game' }).click();
+  await playToEnd([host, a]);
+  for (const p of [host, a]) { await expect(p.locator('.results-page')).toBeVisible(); expect(p.errors).toEqual([]); }
 });

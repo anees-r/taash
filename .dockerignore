@@ -1,0 +1,15 @@
+node_modules
+.next
+.git
+.env
+.env.*
+!.env.example
+test-results
+playwright-report
+tests
+docs
+*.md
+!README.md
+Dockerfile
+docker-compose*.yml
+vis2.mjs
