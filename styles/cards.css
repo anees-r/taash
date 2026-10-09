@@ -1,0 +1,149 @@
+/* Playing cards.
+   Everything inside a card is sized in container-query units (cqw), so one
+   card component scales cleanly from a 34px mini card to a 120px hero card. */
+.pcard {
+  --cw: 84px;
+  width: var(--cw); aspect-ratio: 5 / 7; flex: none;
+  position: relative; container-type: inline-size;
+  border-radius: calc(var(--cw) * .085);
+  transform-style: preserve-3d;
+  user-select: none; -webkit-user-select: none;
+}
+.pcard-face, .pcard-back {
+  position: absolute; inset: 0; border-radius: inherit; overflow: hidden;
+  backface-visibility: hidden;
+}
+.pcard-face {
+  color: var(--card-black);
+  background:
+    radial-gradient(120% 80% at 30% 10%, rgba(255,255,255,.75), transparent 60%),
+    linear-gradient(160deg, var(--paper), #f3ead6);
+  box-shadow: var(--sh-card), inset 0 0 0 1px rgba(120,90,40,.22), inset 0 -2px 0 rgba(120,90,40,.10);
+}
+/* Fine paper grain */
+.pcard-face::before {
+  content: ""; position: absolute; inset: 0; opacity: .35; pointer-events: none;
+  background-image: radial-gradient(rgba(120,90,40,.12) .5px, transparent .6px);
+  background-size: 3px 3px;
+}
+.pcard.red .pcard-face { color: var(--card-red); }
+
+/* Corner index: a fixed gutter column (x 5–21cqw) that nothing else on the
+   face enters. Pips, court frames and the ace medallion are all laid out
+   to the right of / inside this gutter, so ranks and suits never overlap
+   — including the two-character "10" — at any card size. */
+.pcard .idx {
+  position: absolute; top: 5cqw; left: 5cqw; width: 16cqw;
+  display: flex; flex-direction: column; align-items: center; line-height: 1;
+}
+.pcard .idx.br { top: auto; left: auto; bottom: 5cqw; right: 5cqw; transform: rotate(180deg); }
+.pcard .idx .r { display: block; width: 100%; text-align: center; white-space: nowrap; font-family: var(--font-card); font-weight: 700; font-size: 19cqw; letter-spacing: -.04em; }
+.pcard .idx .r.ten { font-size: 16cqw; letter-spacing: -.1em; text-indent: -.1em; }
+.pcard .idx svg { width: 12cqw; height: 12cqw; fill: currentColor; margin-top: 1.5cqw; }
+
+/* Number-card pips: columns at 33/50/67cqw keep a clear lane beside each corner index */
+.pcard .pips { position: absolute; inset: 13% 33%; }
+.pcard .pip { position: absolute; width: 17cqw; height: 17cqw; fill: currentColor; transform: translate(-50%, -50%); left: var(--x); top: var(--y); }
+.pcard .pip.flip { transform: translate(-50%, -50%) rotate(180deg); }
+
+/* Ace */
+.pcard .ace { position: absolute; inset: 0; display: grid; place-items: center; }
+.pcard .ace svg { width: 36cqw; height: 36cqw; fill: currentColor; filter: drop-shadow(0 1px 0 rgba(255,255,255,.6)); }
+.pcard .ace::before {
+  content: ""; position: absolute; width: 56cqw; height: 56cqw; border-radius: 50%;
+  border: .9cqw solid rgba(168,130,60,.55);
+  background: radial-gradient(circle, rgba(168,130,60,.08), transparent 70%);
+}
+.pcard .ace::after {
+  content: ""; position: absolute; width: 49cqw; height: 49cqw; border-radius: 50%;
+  border: .5cqw dashed rgba(168,130,60,.45);
+}
+.pcard.ace-spade .ace svg { width: 44cqw; height: 44cqw; }
+
+/* Court cards: an original framed design — the rank letter set in a gold
+   cartouche with the suit above and below, mirrored like a double-ended card. */
+.pcard .court {
+  position: absolute; inset: 14% 25%; border-radius: 4cqw;
+  border: .9cqw solid rgba(168,130,60,.75);
+  background:
+    linear-gradient(180deg, transparent 49.6%, rgba(168,130,60,.55) 49.6%, rgba(168,130,60,.55) 50.4%, transparent 50.4%),
+    repeating-linear-gradient(45deg, rgba(168,130,60,.07) 0 2cqw, transparent 2cqw 4cqw),
+    linear-gradient(180deg, #fff8e8, #f1e4c6);
+  display: grid; grid-template-rows: 1fr 1fr; place-items: center;
+  box-shadow: inset 0 0 0 1.4cqw rgba(255,252,242,.9), inset 0 0 0 1.9cqw rgba(168,130,60,.35);
+}
+.pcard .court .half { display: grid; justify-items: center; gap: 1cqw; }
+.pcard .court .half.flip { transform: rotate(180deg); }
+.pcard .court .letter { font-family: var(--font-display); font-size: 22cqw; line-height: .9; }
+.pcard .court svg { width: 12cqw; height: 12cqw; fill: currentColor; }
+.pcard .court .crown { width: 10cqw; height: 10cqw; fill: var(--card-gold); }
+
+/* Mini cards (logs, guide, cleared tray) show only index + a large suit */
+.pcard.mini .pips, .pcard.mini .court, .pcard.mini .ace, .pcard.mini .idx.br { display: none; }
+.pcard.mini .idx { top: 7cqw; left: 9cqw; width: auto; align-items: flex-start; }
+.pcard.mini .idx .r { font-size: 34cqw; }
+.pcard.mini .idx .r { width: auto; text-align: left; }
+.pcard.mini .idx .r.ten { font-size: 28cqw; letter-spacing: -.1em; }
+.pcard.mini .idx svg { display: none; }
+.pcard.mini .big { position: absolute; right: 8cqw; bottom: 8cqw; width: 46cqw; height: 46cqw; fill: currentColor; }
+.pcard:not(.mini) .big { display: none; }
+
+/* Back */
+.pcard-back {
+  background:
+    radial-gradient(60% 40% at 50% 50%, rgba(214,176,106,.18), transparent 70%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'%3E%3Cg fill='none' stroke='%23d6b06a' stroke-opacity='.45' stroke-width='.7'%3E%3Cpath d='M10 1.5l2 6.5 6.5 2-6.5 2-2 6.5-2-6.5L1.5 10 8 8z'/%3E%3Ccircle cx='0' cy='0' r='3'/%3E%3Ccircle cx='20' cy='0' r='3'/%3E%3Ccircle cx='0' cy='20' r='3'/%3E%3Ccircle cx='20' cy='20' r='3'/%3E%3C/g%3E%3C/svg%3E") center / 11cqw 11cqw,
+    linear-gradient(150deg, var(--back-2), var(--back-1));
+  box-shadow: var(--sh-card), inset 0 0 0 3.5cqw #f5ecd8, inset 0 0 0 4.4cqw rgba(168,130,60,.8), inset 0 0 0 6cqw var(--back-1);
+  transform: rotateY(180deg);
+}
+.pcard-back::after {
+  content: ""; position: absolute; left: 50%; top: 50%; width: 34cqw; height: 34cqw;
+  transform: translate(-50%, -50%) rotate(45deg);
+  border: 1cqw solid rgba(214,176,106,.85); border-radius: 3cqw;
+  background: radial-gradient(circle, #4b3675, #2c1e48);
+  box-shadow: 0 0 0 1.4cqw rgba(44,30,72,.9), 0 0 0 1.9cqw rgba(214,176,106,.5);
+}
+.pcard-back .mark { position: absolute; left: 50%; top: 50%; width: 22cqw; height: 22cqw; transform: translate(-50%, -50%); fill: var(--gold-300); z-index: 1; }
+.pcard.is-back { transform: rotateY(180deg); }
+.pcard.is-back .pcard-back { transform: rotateY(180deg); }
+/* Simpler: a back-only card renders without the flip trick */
+.pcard.back-only .pcard-back { transform: none; }
+
+/* ---------- Interaction states (hand) ---------- */
+.hand .pcard { cursor: pointer; transition: transform var(--t-med) var(--ease-out), filter var(--t-med), margin var(--t-med) var(--ease-out); }
+.hand .pcard .pcard-face { transition: box-shadow var(--t-med); }
+.hand .pcard.is-playable:hover, .hand .pcard.is-playable:focus-visible { transform: translateY(-14px); }
+.hand .pcard.is-playable:hover .pcard-face { box-shadow: var(--sh-card-lift), inset 0 0 0 1px rgba(120,90,40,.22); }
+.hand .pcard.is-playable::after {
+  content: ""; position: absolute; left: 22%; right: 22%; bottom: -9px; height: 3px; border-radius: 2px;
+  background: var(--gold-400); opacity: .9;
+}
+.hand .pcard.is-selected { transform: translateY(-30px) !important; z-index: 5; }
+.hand .pcard.is-selected .pcard-face { box-shadow: 0 0 0 2.5px var(--gold-300), 0 0 26px rgba(214,176,106,.45), var(--sh-card-lift); }
+.hand .pcard.is-selected.will-thulla .pcard-face { box-shadow: 0 0 0 2.5px var(--ember-400), 0 0 26px rgba(240,122,82,.5), var(--sh-card-lift); }
+.hand .pcard.is-disabled { cursor: not-allowed; }
+.hand .pcard.is-disabled .pcard-face { filter: saturate(.35) brightness(.62); }
+.hand .pcard.is-disabled .lock {
+  display: grid; position: absolute; left: 50%; bottom: 10%; transform: translateX(-50%);
+  width: 26cqw; height: 26cqw; border-radius: 50%; place-items: center;
+  background: rgba(18,14,31,.82); color: var(--lavender-300); font-size: 14cqw; z-index: 2;
+}
+.pcard .lock { display: none; }
+.hand .pcard.is-disabled .lock svg { width: 60%; height: 60%; }
+.hand .pcard.shake { animation: cardNo 360ms var(--ease-out); }
+@keyframes cardNo { 20% { translate: -6px 0; } 40% { translate: 5px 0; } 60% { translate: -3px 0; } 80% { translate: 2px 0; } }
+
+/* Winning card highlight on the pile */
+.pcard.is-winning .pcard-face { box-shadow: 0 0 0 2.5px var(--gold-300), 0 0 30px rgba(214,176,106,.55), var(--sh-card-lift); }
+.pcard.is-thulla .pcard-face { box-shadow: 0 0 0 2.5px var(--ember-400), 0 0 30px rgba(240,122,82,.55), var(--sh-card-lift); }
+.pcard .tag {
+  position: absolute; left: 50%; top: -12px; transform: translateX(-50%); z-index: 3; white-space: nowrap;
+  padding: 2px 8px; border-radius: var(--r-pill); font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase;
+  background: var(--gold-400); color: var(--gold-ink); box-shadow: var(--sh-1);
+}
+.pcard .tag.ember { background: var(--ember-400); color: #2a0d04; }
+
+/* Card row used in guides and summaries */
+.card-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.card-row .arrow { color: var(--fg-faint); font-weight: 700; }

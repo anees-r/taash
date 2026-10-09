@@ -1,0 +1,105 @@
+/* Taash design tokens.
+   Layout concept: a lamp-lit card room — dark aubergine walls, a green baize
+   table at the centre of every game, ivory paper cards, gold used sparingly
+   for the host, the turn and the winner.
+   Taash commits to one dark look by choice, so there is no light theme. */
+:root {
+  color-scheme: dark;
+
+  /* Room (backgrounds, darkest → lightest) */
+  --night-950: #0c0915;
+  --night-900: #120e1f;
+  --night-850: #17122a;
+  --night-800: #1d1733;
+  --plum-700: #2a2045;
+  --plum-600: #3a2c5c;
+  --plum-500: #54417f;
+
+  /* Ink */
+  --ivory-50: #f7f0e1;     /* primary text on room */
+  --ivory-200: #e3d8c2;
+  --lavender-300: #b8a9d8; /* secondary text */
+  --lavender-400: #9787bd; /* tertiary text, ≥4.5:1 on night-900 */
+  --lavender-600: #6b5c94; /* hairlines on room */
+
+  /* Accents */
+  --gold-300: #ead197;
+  --gold-400: #d6b06a;     /* host, turn, primary action */
+  --gold-500: #b88f45;
+  --gold-ink: #241a06;     /* text on gold */
+  --ember-400: #f07a52;    /* Thulla impact */
+  --ember-500: #d9583a;
+  --mist-300: #9fd8c6;     /* cleared / success */
+  --rose-300: #f0a3b2;     /* error */
+
+  /* Table */
+  --baize-700: #0f3a31;
+  --baize-800: #0b2c26;
+  --baize-900: #071d19;
+  --rail-700: #2b1c35;
+  --rail-500: #4a3158;
+
+  /* Cards */
+  --paper: #fbf6ea;
+  --paper-edge: #e8dcc2;
+  --card-red: #b0263a;
+  --card-black: #1e1824;
+  --card-gold: #a8823c;
+  --back-1: #2c1e48;
+  --back-2: #43306b;
+
+  /* Semantic */
+  --bg: var(--night-900);
+  --fg: var(--ivory-50);
+  --fg-muted: var(--lavender-300);
+  --fg-faint: var(--lavender-400);
+  --line: color-mix(in srgb, var(--lavender-600) 45%, transparent);
+  --line-strong: color-mix(in srgb, var(--lavender-600) 80%, transparent);
+  --surface-1: rgba(42, 32, 69, .55);
+  --surface-2: rgba(58, 44, 92, .55);
+  --surface-solid: #1f1836;
+  --focus: var(--gold-300);
+
+  /* Type */
+  --font-display: "Rozha One", "Bodoni 72", "Didot", Georgia, serif;
+  --font-body: "Hanken Grotesk", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-card: "Libre Caslon Text", "Iowan Old Style", Georgia, serif;
+  --font-urdu: "Noto Nastaliq Urdu", "Jameel Noori Nastaleeq", serif;
+
+  --fs-xs: .75rem;      /* 12 */
+  --fs-sm: .8125rem;    /* 13 */
+  --fs-md: .9375rem;    /* 15 body */
+  --fs-lg: 1.0625rem;   /* 17 */
+  --fs-xl: 1.375rem;    /* 22 section */
+  --fs-2xl: 1.875rem;   /* 30 page */
+  --fs-3xl: 2.75rem;    /* 44 game name */
+  --fs-hero: clamp(2.6rem, 6vw, 4.5rem);
+
+  /* Space (4px grid) */
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 20px;
+  --sp-6: 24px; --sp-8: 32px; --sp-10: 40px; --sp-12: 48px; --sp-16: 64px;
+
+  /* Radius */
+  --r-sm: 6px; --r-md: 10px; --r-lg: 16px; --r-xl: 24px; --r-pill: 999px;
+
+  /* Elevation */
+  --sh-1: 0 1px 2px rgba(0,0,0,.35), 0 2px 8px rgba(0,0,0,.25);
+  --sh-2: 0 6px 20px rgba(0,0,0,.4), 0 2px 6px rgba(0,0,0,.3);
+  --sh-3: 0 24px 60px rgba(0,0,0,.55), 0 8px 20px rgba(0,0,0,.35);
+  --sh-card: 0 1px 1px rgba(0,0,0,.25), 0 3px 8px rgba(10,4,20,.35);
+  --sh-card-lift: 0 10px 24px rgba(10,4,20,.5), 0 3px 6px rgba(0,0,0,.3);
+  --glow-gold: 0 0 0 1px rgba(214,176,106,.65), 0 0 24px rgba(214,176,106,.25);
+
+  /* Motion */
+  --ease-out: cubic-bezier(.2, .8, .2, 1);
+  --ease-in-out: cubic-bezier(.65, 0, .35, 1);
+  --ease-spring: cubic-bezier(.34, 1.4, .64, 1);
+  --ease-slam: cubic-bezier(.75, 0, .95, .45);
+  --t-fast: 140ms;
+  --t-med: 260ms;
+  --t-slow: 480ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --t-fast: 1ms; --t-med: 1ms; --t-slow: 1ms; }
+}
