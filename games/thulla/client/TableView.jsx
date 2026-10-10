@@ -2,7 +2,8 @@
 /**
  * React host for the Thulla table. The table itself is the prototype's
  * imperative, animation-heavy view (table-view.js); React supplies the chat
- * (portalled into the table's chat panel) and the rules drawer.
+ * (portalled into the table's chat drawer, and passed on so new messages pop
+ * up beside the sender's seat) and the rules drawer.
  */
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
@@ -15,7 +16,7 @@ export function ThullaTableView({ code, game, settings, chat, you, controllerRef
   const hostRef = useRef(null);
   const [chatHost, setChatHost] = useState(null);
   const [rules, setRules] = useState(false);
-  const [chatOpen, setChatOpen] = useState(typeof window !== 'undefined' && window.innerWidth > 1100);
+  const [chatOpen, setChatOpen] = useState(false);
   const ctl = useRef(null);
   const hooks = useRef({});
   hooks.current = { onAction, onLeave, onGameOver, onResync };
@@ -39,6 +40,17 @@ export function ThullaTableView({ code, game, settings, chat, you, controllerRef
     return () => { c.destroy(); if (controllerRef.current === c) controllerRef.current = null; ctl.current = null; };
     // Mount once per match; later updates arrive as events through the controller.
   }, [game.matchId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Messages already on screen when the table mounts are history; only new ones pop up at the seats.
+  const seenChat = useRef(null);
+  if (seenChat.current === null) seenChat.current = new Set(chat.map(m => m.id));
+  useEffect(() => {
+    for (const m of chat) {
+      if (seenChat.current.has(m.id)) continue;
+      seenChat.current.add(m.id);
+      if (m.kind === 'msg' && m.from !== you) ctl.current?.chatBubble(m.from, m.text);
+    }
+  }, [chat, you]);
 
   const onUnread = useCallback(k => ctl.current?.setUnread(k), []);
   return (
