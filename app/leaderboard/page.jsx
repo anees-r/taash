@@ -5,7 +5,8 @@ import { AppShell } from '@/components/platform/AppShell';
 import { Avatar } from '@/components/platform/Avatar';
 import { LeaderboardControls } from '@/components/platform/LeaderboardControls';
 import { getViewer } from '@/lib/auth/viewer';
-import { leaderboard, PAGE } from '@/lib/db/social';
+import { leaderboard, relationsOf, PAGE } from '@/lib/db/social';
+import { AddFriendButton } from '@/components/platform/AddFriendButton';
 import { isOnline } from '@/lib/server/live';
 import { catalog } from '@/games/catalog';
 
@@ -19,7 +20,8 @@ export default async function LeaderboardPage({ searchParams }) {
   const scope = user && sp.scope !== 'all' ? 'friends' : 'all';
   const sort = sp.sort === 'firsts' ? 'firsts' : 'rating';
   const page = Math.max(0, Math.min(1000, parseInt(sp.page, 10) || 0));
-  const rows = await leaderboard({ scope, sort, page, userId: user?.userId });
+  const [rows, rel] = await Promise.all([leaderboard({ scope, sort, page, userId: user?.userId }), user ? relationsOf(user.userId) : null]);
+  const relation = id => (!rel ? undefined : rel.friends.includes(id) ? 'friend' : rel.sent.includes(id) ? 'sent' : rel.received.includes(id) ? 'received' : 'none');
   const expl = sort === 'rating'
     ? 'Ranked by Thulla rating, from ranked games only. Rating rises when you finish ahead of other players and falls when you finish behind them, weighted by their ratings. Going out early wins more; leaving a game loses the most.'
     : 'Ranked by the number of games finished in 1st place. Ties go to the higher rating.';
@@ -44,7 +46,7 @@ export default async function LeaderboardPage({ searchParams }) {
                 return (
                   <tr key={r.id} className={me ? 'me' : undefined}>
                     <td className="rank-cell">{r.rank <= 3 ? <span className={'medal m' + r.rank}>{r.rank}</span> : <span className="num">{r.rank}</span>}</td>
-                    <td><div className="lb-person"><Avatar person={r} size="sm" status={isOnline(r.id) ? 'on' : null} /><Link href={'/u/' + r.handle}><b>{me ? r.name + ' (you)' : r.name}</b></Link></div></td>
+                    <td><div className="lb-person"><Avatar person={r} size="sm" status={isOnline(r.id) ? 'on' : null} /><Link href={'/u/' + r.handle}><b>{me ? r.name + ' (you)' : r.name}</b></Link>{!me && user ? <AddFriendButton handle={r.handle} userId={r.id} relation={relation(r.id)} compact className="icon-btn lb-add" /> : null}</div></td>
                     <td className={'r num' + (sort === 'rating' ? ' sorted' : '')}>{r.rating}</td>
                     <td className={'r num' + (sort === 'firsts' ? ' sorted' : '')}>{r.firsts}</td>
                     <td className="r num hide-sm">{r.played}</td>

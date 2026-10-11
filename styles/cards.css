@@ -16,8 +16,9 @@
 .pcard-face {
   color: var(--card-black);
   background:
-    radial-gradient(120% 80% at 30% 10%, rgba(255,255,255,.75), transparent 60%),
-    linear-gradient(160deg, var(--paper), #f3ead6);
+    var(--face-pattern, linear-gradient(transparent, transparent)),     /* card designs add a watermark here */
+    radial-gradient(120% 80% at 30% 10%, var(--face-sheen, rgba(255,255,255,.75)), transparent 60%),
+    linear-gradient(160deg, var(--paper), var(--paper-2, #f3ead6));
   box-shadow: var(--sh-card), inset 0 0 0 1px rgba(120,90,40,.22), inset 0 -2px 0 rgba(120,90,40,.10);
 }
 /* Fine paper grain */
@@ -92,7 +93,7 @@
 .pcard-back {
   background:
     radial-gradient(60% 40% at 50% 50%, rgba(214,176,106,.18), transparent 70%),
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'%3E%3Cg fill='none' stroke='%23d6b06a' stroke-opacity='.45' stroke-width='.7'%3E%3Cpath d='M10 1.5l2 6.5 6.5 2-6.5 2-2 6.5-2-6.5L1.5 10 8 8z'/%3E%3Ccircle cx='0' cy='0' r='3'/%3E%3Ccircle cx='20' cy='0' r='3'/%3E%3Ccircle cx='0' cy='20' r='3'/%3E%3Ccircle cx='20' cy='20' r='3'/%3E%3C/g%3E%3C/svg%3E") center / 11cqw 11cqw,
+    var(--back-pattern, url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'%3E%3Cg fill='none' stroke='%23d6b06a' stroke-opacity='.45' stroke-width='.7'%3E%3Cpath d='M10 1.5l2 6.5 6.5 2-6.5 2-2 6.5-2-6.5L1.5 10 8 8z'/%3E%3Ccircle cx='0' cy='0' r='3'/%3E%3Ccircle cx='20' cy='0' r='3'/%3E%3Ccircle cx='0' cy='20' r='3'/%3E%3Ccircle cx='20' cy='20' r='3'/%3E%3C/g%3E%3C/svg%3E") center / 11cqw 11cqw),
     linear-gradient(150deg, var(--back-2), var(--back-1));
   box-shadow: var(--sh-card), inset 0 0 0 3.5cqw #f5ecd8, inset 0 0 0 4.4cqw rgba(168,130,60,.8), inset 0 0 0 6cqw var(--back-1);
   transform: rotateY(180deg);

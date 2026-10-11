@@ -25,10 +25,13 @@ export function JoinForm({ initialCode = '', onJoined, codeLocked }) {
   const [codeErr, setCodeErr] = useState(null);
   const [nameErr, setNameErr] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [canWatch, setCanWatch] = useState(false);
+  const [elsewhere, setElsewhere] = useState(null);
   const asGuest = viewer.kind !== 'user';
 
-  async function submit(e) {
-    e.preventDefault();
+  async function submit(e, as) {
+    e?.preventDefault();
+    setCanWatch(false); setElsewhere(null);
     let ok = true;
     if (asGuest && !name.trim()) { setNameErr('Enter a display name — it’s how the table will know you.'); ok = false; }
     if (!code.trim()) { setCodeErr('Enter the table code your host shared.'); ok = false; }
@@ -39,10 +42,12 @@ export function JoinForm({ initialCode = '', onJoined, codeLocked }) {
       if (r.error) { setBusy(false); setNameErr(r.error); return; }
       resetSocket();
     }
-    const res = await call('table:join', { code });
+    const res = await call('table:join', { code, as });
     setBusy(false);
     if (res.error) {
       setCodeErr(res.error);
+      setCanWatch(!!res.canWatch);
+      setElsewhere(res.code === 'elsewhere' ? res.table : null);
       document.getElementById(res.code === 'name-taken' ? 'join-name' : 'join-code')?.focus();
       if (res.code === 'name-taken') { setNameErr(res.error); setCodeErr(null); }
       animate(formRef.current, [{ transform: 'translateX(0)' }, { transform: 'translateX(-6px)' }, { transform: 'translateX(5px)' }, { transform: 'translateX(0)' }], { duration: 300, fill: 'none' });
@@ -62,6 +67,8 @@ export function JoinForm({ initialCode = '', onJoined, codeLocked }) {
           value={code} onChange={e => { setCode(formatCode(e.target.value)); setCodeErr(null); }} />
         <span className="hint" id="join-code-hint">Ask the host for the six-character code, like QAF-7R2.</span>
         {codeErr ? <p className="error" id="join-code-err" role="alert">{codeErr}</p> : null}
+        {canWatch ? <button type="button" className="btn btn-sm" onClick={() => submit(null, 'spectator')} disabled={busy}>Watch this table instead</button> : null}
+        {elsewhere ? <Link className="btn btn-sm btn-primary" href={'/t/' + elsewhere}>Go to table {elsewhere}</Link> : null}
       </div>
       <div className="join-as">
         <Avatar person={{ name: asGuest ? (name || 'Guest') : viewer.name, guest: asGuest }} size="sm" />

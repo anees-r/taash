@@ -10,13 +10,14 @@ import { resetSocket } from '@/lib/client/socket';
 function navActive(path) {
   if (path.startsWith('/leaderboard')) return 'leaderboard';
   if (path.startsWith('/friends')) return 'friends';
+  if (path.startsWith('/shop')) return 'shop';
   if (path.startsWith('/profile') || path.startsWith('/u/')) return 'profile';
   if (path.startsWith('/join')) return 'join';
   return 'home';
 }
 
 /** @param {{viewer:any, rating:number|null}} p */
-export function TopBar({ viewer, rating }) {
+export function TopBar({ viewer, rating, coins }) {
   const path = usePathname() || '/';
   const active = navActive(path);
   const [menu, setMenu] = useState(null);
@@ -34,9 +35,11 @@ export function TopBar({ viewer, rating }) {
       <nav className="nav" aria-label="Main">
         {item('/', 'Games', 'taash-mark')}
         {item('/leaderboard', 'Leaderboard', 'i-trophy')}
+        {item('/shop', 'Shop', 'i-crown')}
         {item('/friends', 'Friends', 'i-users')}
       </nav>
       <div className="topbar-end">
+        {viewer.kind === 'user' && coins != null ? <Link className="coin-pill num" href="/shop" title="Your coins: spend them in the shop" aria-label={coins + ' coins, open the shop'}><span className="coin" aria-hidden="true" />{coins}</Link> : null}
         <Link className="icon-btn" href="/join" aria-label="Join a table with a code" title="Join a table"><Icon id="i-hand" /></Link>
         <button ref={chipRef} type="button" className="account-chip" aria-haspopup="menu" aria-expanded={!!menu} aria-label={'Account: ' + name}
           onClick={() => { if (menu) setMenu(null); else { const r = chipRef.current.getBoundingClientRect(); setMenu({ top: r.bottom + 8, right: Math.max(12, window.innerWidth - r.right) }); } }}>
@@ -69,6 +72,7 @@ function AccountMenu({ viewer, name, pos, onClose }) {
       {viewer.kind === 'user' ? item('/profile', 'Profile & history', 'i-user') : null}
       {item('/friends', 'Friends', 'i-users')}
       {item('/leaderboard', 'Leaderboard', 'i-trophy')}
+      {viewer.kind === 'user' ? item('/shop', 'Shop & rank rewards', 'i-crown') : null}
       <hr className="divider" />
       {viewer.kind === 'user'
         ? <form action={signOutAction} onSubmit={() => resetSocket()}><button className="menu-item" role="menuitem" type="submit"><Icon id="i-flag" />Sign out</button></form>

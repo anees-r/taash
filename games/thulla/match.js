@@ -316,7 +316,7 @@ export const thulla = {
       cleared: { ...S.cleared },
       finishOrder: S.finishOrder.slice(),
       loser: S.loser,
-      history: S.baariHistory.slice(-12),
+      history: S.baariHistory.slice(),           // the whole game: the baari log shows every baari
     };
   },
 

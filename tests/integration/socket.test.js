@@ -41,7 +41,8 @@ test('no cookie → anonymous; table actions are not available', async () => {
   const { s, sess } = await open();
   assert.strictEqual(sess.kind, 'anon');
   const r = await ask(s, 'table:create', { gameId: 'thulla', settings: defaultSettings() }, 400);
-  assert.ok(r.timeout);
+  assert.strictEqual(r.code, 'anon');                      // a clear answer, not a silent timeout
+  assert.match(r.error, /display name/);
 });
 
 test('a tampered guest cookie is rejected', async () => {
@@ -69,7 +70,7 @@ test('host-only actions are enforced on the server; payloads are validated', asy
   assert.strictEqual((await ask(other.s, 'game:action', { code, actionId: 'abcd1', action: { type: 'play', card: 'ZZ' } })).code, 'invalid');
   assert.strictEqual((await ask(other.s, 'table:create', { gameId: 'thulla' })).code, 'invalid');
   // A client cannot claim to be someone else: there is no player id in any payload to forge.
-  assert.match((await ask(other.s, 'game:action', { code, actionId: 'abcd2', action: { type: 'play', card: 'AS' } })).error, /No game/);
+  assert.match((await ask(other.s, 'game:action', { code, actionId: 'abcd2', action: { type: 'play', card: 'AS' } })).error, /no game/);
 });
 
 test('each player receives only their own hand; public events carry no hands', async () => {
@@ -106,10 +107,10 @@ test('chat is rate limited and members-only', async () => {
   const stranger = await open(guestCookie('Stranger'));
   const { code } = await ask(host.s, 'table:create', { gameId: 'thulla', settings: defaultSettings() });
   await ask(host.s, 'table:join', { code });
-  assert.match((await ask(stranger.s, 'chat:send', { code, text: 'hi' })).error, /Only players/);
+  assert.match((await ask(stranger.s, 'chat:send', { code, text: 'hi' })).error, /Only people/);
   const replies = [];
   for (let i = 0; i < 8; i++) replies.push(await ask(host.s, 'chat:send', { code, text: 'msg ' + i }));
-  assert.ok(replies.some(r => r.code === 'rate'));
+  assert.ok(replies.some(r => r.code === 'slow' || r.code === 'rate'));   // chat spam protection kicks in
 });
 
 test('registered session from the Auth.js cookie; bumping session_version revokes it', async () => {

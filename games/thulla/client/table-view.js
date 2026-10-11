@@ -8,7 +8,7 @@
  * decide outcomes, and if events pile up (slow device, background tab) the
  * queue fast-forwards without animating.
  */
-import { h, icon, avatar, animate, reducedMotion } from '@/lib/client/dom';
+import { h, icon, avatar, animate, reducedMotion, storage } from '@/lib/client/dom';
 import { renderCard, suitSvg } from '@/lib/client/cards';
 import { playSound, soundEnabled, setSoundEnabled } from '@/lib/client/sound';
 import { toast } from '@/lib/client/toast';
@@ -16,6 +16,7 @@ import { openModal, confirmDialog } from '@/lib/client/modal';
 import { ordinal, plural, clockFormat } from '@/lib/client/format';
 import { SUIT_NAMES, SUIT_GLYPH, RED, sortHand, parseCard, shortCard, legalFromView, thullaFromView } from '../engine/rules.js';
 import { settingsSummary } from '../settings.js';
+import { labelFor } from '@/lib/sounds';
 
 const SUIT_ORDER = ['C', 'D', 'S', 'H'];
 const sortIds = (ids, mode) => sortHand(ids.map(parseCard), mode).map(c => c.id);
@@ -33,6 +34,10 @@ const sortIds = (ids, mode) => sortHand(ids.map(parseCard), mode).map(c => c.id)
 export function mountThullaTable(container, o) {
   const { code, seats: seatsMeta, me, settings, hooks } = o;
   const n = seatsMeta.length;
+  const spectating = me < 0;
+  /** A seat's card design (null = classic): their card backs and the edge of every card they play. */
+  const deckOf = seat => (seat != null && seatsMeta[seat] && seatsMeta[seat].cosmetics && seatsMeta[seat].cosmetics.cards) || null;
+  const withDeck = (el, seat) => { const d = deckOf(seat); if (d) el.dataset.deck = d; return el; };
   let destroyed = false;
   const timers = new Set();
   const later = (fn, ms) => { const id = setTimeout(() => { timers.delete(id); if (!destroyed) fn(); }, ms); timers.add(id); return id; };
@@ -61,11 +66,15 @@ export function mountThullaTable(container, o) {
      state runs down the left; chat lives in a drawer and pops up beside whoever spoke. */
   // Seats step down in size as the table fills up: plates, then compact plates, then avatars with a badge.
   const tier = n <= 4 ? 't-s' : n <= 6 ? 't-m' : n <= 12 ? 't-l' : n <= 20 ? 't-xl' : 't-xxl';
-  const root = h('div.tt.' + tier, { 'data-players': n });
+  const root = h('div.tt.' + tier + (spectating ? '.spectating' : ''), { 'data-players': n });
+  if (o.design) root.dataset.table = o.design;                 // the host's table design
   const fx = document.getElementById('layer-fx');
 
+  /** Whose table we're playing on, when someone brought a design. */
+  const designWhose = () => { const d = o.designInfo; return d ? d.name + ' · ' + (d.byId === seatsMeta[me]?.id ? 'your' : d.by.split(' ')[0] + '’s') + ' table' : null; };
+  function designTag() { const t = designWhose(); return t ? h('span.tt-design', { title: 'The table design in play. When several people bring one, the highest-ranked or priciest is used.' }, t) : null; }
   const tool = (label, ic, onclick) => h('button.icon-btn', { type: 'button', 'aria-label': label, title: label, onclick }, icon(ic));
-  const soundBtn = h('button.icon-btn.tt-opt', { type: 'button', 'aria-pressed': String(soundEnabled()), 'aria-label': 'Sound effects', title: 'Sound effects (off by default)' }, icon(soundEnabled() ? 'i-sound' : 'i-mute'));
+  const soundBtn = h('button.icon-btn.tt-opt', { type: 'button', 'aria-pressed': String(soundEnabled()), 'aria-label': 'Sound effects', title: 'Sound effects' }, icon(soundEnabled() ? 'i-sound' : 'i-mute'));
   function toggleSound() {
     const on = !soundEnabled(); setSoundEnabled(on);
     soundBtn.setAttribute('aria-pressed', String(on)); soundBtn.replaceChildren(icon(on ? 'i-sound' : 'i-mute'));
@@ -77,10 +86,33 @@ export function mountThullaTable(container, o) {
   const chatBtn = h('button.icon-btn.tt-chat-toggle', { type: 'button', 'aria-label': 'Table chat', title: 'Table chat', 'aria-expanded': 'false' }, icon('i-chat'), chatDot);
   const cornerL = h('div.tt-corner.tt-corner-l',
     tool('Leave table', 'i-back', leave),
-    h('div.tt-title', h('b.display', 'Thulla'), h('span.faint.num', 'Table ' + code)));
+    h('div.tt-title', h('b.display', 'Thulla'), h('span.faint.num', 'Table ' + code), designTag()));
   const rulesBtn = tool('How to play', 'i-book', () => hooks.openRules());
   rulesBtn.classList.add('tt-opt');
-  const cornerR = h('div.tt-corner.tt-corner-r', rulesBtn, tool('Table info', 'i-info', openInfo), soundBtn, chatBtn);
+  // Players only: step away (auto-play now), the sound board, and giving up.
+  const awayBtn = h('button.icon-btn.tt-opt', { type: 'button', 'aria-pressed': 'false', 'aria-label': 'Mark me away', title: 'Away: your turns are played for you until you come back' }, icon('i-wifi-off'));
+  awayBtn.addEventListener('click', toggleAway);
+  // The sound board stays in reach on phones too; its sounds come from /api/sounds.
+  const boardBtn = h('button.icon-btn', { type: 'button', 'aria-label': 'Sound board', title: 'Sound board', 'aria-haspopup': 'true', 'aria-expanded': 'false' }, icon('i-megaphone'));
+  // Players get the sounds; everyone (spectators too) gets the volume mixer.
+  const boardSounds = h('div.sb-sounds', h('p.sb-empty', 'Loading sounds…'));
+  const boardMix = h('div.sb-mix');
+  const board = h('div.sound-board', { hidden: true, role: 'dialog', 'aria-label': 'Sound board' }, ...(spectating ? [boardMix] : [boardSounds, boardMix]));
+  // Who played what, as it happens.
+  const sbFeed = h('div.sb-feed', { 'aria-live': 'polite' });
+  boardBtn.addEventListener('click', () => toggleBoard(board.hidden));
+  const forfeitBtn = h('button.icon-btn.tt-opt.forfeit-btn', { type: 'button', 'aria-label': 'Forfeit the game', title: 'Forfeit: the game ends now and you lose' }, icon('i-flag'));
+  forfeitBtn.addEventListener('click', forfeit);
+  // Shown once there are sounds in public/sounds.
+  const boardWrap = h('div.board-wrap', { hidden: true }, boardBtn, board);
+  // One job per button on wide screens; on phones they all live in the menu.
+  const optTool = (label, ic, fn) => { const b = tool(label, ic, fn); b.classList.add('tt-opt'); return b; };
+  const menuBtn = h('button.icon-btn.tt-menu', { type: 'button', 'aria-label': 'Menu', title: 'Menu', 'aria-haspopup': 'dialog' }, icon('i-menu'));
+  menuBtn.addEventListener('click', openMenu);
+  const cornerR = h('div.tt-corner.tt-corner-r',
+    rulesBtn, optTool('Table info', 'i-sliders', openInfo), optTool('Baari log', 'i-list', openLog), optTool('Players', 'i-users', openPlayers),
+    ...(spectating ? [boardWrap] : [awayBtn, boardWrap, forfeitBtn]),
+    soundBtn, menuBtn, chatBtn);
 
   // Game state: a column down the left on wide screens, a strip along the top on smaller ones.
   const baariLabel = h('span.hud-label', 'Baari');
@@ -91,11 +123,16 @@ export function mountThullaTable(container, o) {
   const playsList = h('ol.hud-plays');
   const playsBlock = h('section.hud-block.hud-baari', { hidden: true }, h('h2.hud-title', 'This baari'), playsList);
   const lastEl = h('p.hud-last', { hidden: true });
+  // Cleared cards go face down onto a pile in the state column, off the table, so a big
+  // table never mistakes it for someone's hand.
+  const discardStack = h('div.dc-stack', { 'aria-hidden': 'true' });
+  const discardNum = h('b.num', '0');
+  const discard = h('div.hud-discard', { hidden: true }, discardStack, h('span.dc-text', discardNum, h('span', ' cleared')));
   const hud = h('aside.tt-hud', { 'aria-label': 'Game state' },
     h('div.hud-head', baariLabel, baariNum),
     h('div.hud-lead', leadChip, turnLine),
     cleared ? cleared.el : null,
-    playsBlock, lastEl);
+    playsBlock, lastEl, discard);
 
   // The table plane. Everything inside the felt lies flat on it (pile, face-down hands, your spot).
   const pileEl = h('div.pile', { 'aria-hidden': 'true' });
@@ -162,6 +199,12 @@ export function mountThullaTable(container, o) {
     h('div.dock-tools', h('div.dock-meta', mePlate, sortBtn), tally),
     handEl,
     h('div.dock-main', h('span.dock-tip', 'or double-click a card'), reqBtn, playBtn));
+  if (spectating) {
+    dock.replaceChildren(h('div.spectate-bar',
+      h('span.chip.chip-mist', icon('i-info'), 'Watching'),
+      h('p', 'You see every card that’s played, never anyone’s hand.'),
+      h('button.btn.btn-sm.btn-ghost', { type: 'button', onclick: () => hooks.leave() }, 'Stop watching')));
+  }
   playBtn.addEventListener('click', () => { if (selected) humanPlay(selected); });
   reqBtn.addEventListener('click', humanRequest);
   backBtn.addEventListener('click', () => sendAction({ type: 'back' }));
@@ -195,7 +238,7 @@ export function mountThullaTable(container, o) {
   const onDocDown = e => { if (chatPop && !wideQuery.matches && !chatAside.contains(e.target) && !chatBtn.contains(e.target)) setChat(false); };
   document.addEventListener('pointerdown', onDocDown);
 
-  root.append(stage, dock, cornerL, cornerR, hud, chatAside, flash, urgencyEdge, urgentSr);
+  root.append(stage, dock, cornerL, cornerR, sbFeed, hud, chatAside, flash, urgencyEdge, urgentSr);
   container.appendChild(root);
 
   /* ------------------------------------------------------------ seats */
@@ -220,7 +263,7 @@ export function mountThullaTable(container, o) {
   }
   // Opponents' hands lie face down in front of them, while there is room on the table for them.
   // One back per card they hold, so the fan grows and shrinks with every play and pickup.
-  const fanEls = seatsMeta.map((p, i) => (i === me || n > 12 ? null : fans.appendChild(h('div.fan', { 'data-k': '-1' }))));
+  const fanEls = seatsMeta.map((p, i) => (i === me || n > 12 ? null : fans.appendChild(withDeck(h('div.fan', { 'data-k': '-1' }), i))));
   function renderFan(i, count) {
     const f = fanEls[i];
     if (!f) return;
@@ -326,6 +369,23 @@ export function mountThullaTable(container, o) {
     if (V && !busy) rebuildPile();
     renderMySlot();
     renderSpot();
+    renderDiscard();
+  }
+  /** How many cards have left the game for good, shown as a face-down pile that grows. */
+  function renderDiscard(bump) {
+    const k = V && V.cleared ? Object.values(V.cleared).reduce((x, y) => x + y, 0) : 0;
+    discard.hidden = !k;
+    discardNum.textContent = k;
+    discard.setAttribute('title', k + ' cards have left the game for good');
+    const layers = Math.min(7, Math.ceil(k / 4));
+    if (discardStack.childElementCount !== layers) {
+      discardStack.replaceChildren(...Array.from({ length: layers }, (_, i) => {
+        const c = renderCard('back', { size: 26 });
+        c.style.transform = 'translate(' + (i * .6) + 'px,' + (-i * 1.4) + 'px) rotate(' + (((i * 37) % 11) - 5) + 'deg)';
+        return c;
+      }));
+    }
+    if (bump && !reducedMotion()) animate(discard, [{ scale: '1' }, { scale: '1.12' }, { scale: '1' }], { duration: 320, easing: 'cubic-bezier(.34,1.4,.64,1)', fill: 'none' });
   }
   /** The light on the felt leans towards whoever is to play (or answer). */
   function renderSpot() {
@@ -402,6 +462,13 @@ export function mountThullaTable(container, o) {
       const st = seatStatus(me);
       meStatus.className = 'me-status st-' + st.cls; meStatus.textContent = st.text;
       backBtn.hidden = !seatInfo(me).away || seatInfo(me).finished || V.phase === 'over';
+      const away = !!seatInfo(me).away;
+      awayBtn.setAttribute('aria-pressed', String(away));
+      awayBtn.setAttribute('aria-label', away ? 'I’m back' : 'Mark me away');
+      awayBtn.classList.toggle('is-on', away);
+      const out = seatInfo(me).finished || V.phase === 'over';
+      forfeitBtn.hidden = out;
+      awayBtn.hidden = out;
     }
     renderHud();
     renderSpot();
@@ -534,7 +601,7 @@ export function mountThullaTable(container, o) {
       let el = old.get(id);
       if (el) old.delete(id);
       else {
-        el = renderCard(id, { size: lay.cw || handCardSize(), button: true });
+        el = withDeck(renderCard(id, { size: lay.cw || handCardSize(), button: true }), me);
         el.setAttribute('role', 'option');
         el.dataset.label = el.getAttribute('aria-label');
         el.classList.add('no-trans');                                // appears in place, no slide-in
@@ -868,7 +935,7 @@ export function mountThullaTable(container, o) {
     const cw = pileSize();
     const t = slotTransform(seat, index);
     const slot = h('div.pslot', { 'data-seat': seat, 'data-y': t.y, 'data-rot': t.rot, style: { transform: 'translate(' + t.x + 'px,' + t.y + 'px)', zIndex: String(index + 1) } });
-    const c = renderCard(card, { size: cw });
+    const c = withDeck(renderCard(card, { size: cw }), seat);
     c.style.transform = 'rotate(' + t.rot + 'deg)';
     slot.appendChild(c);
     slot.style.marginLeft = (-cw / 2) + 'px'; slot.style.marginTop = (-cw * 0.7) + 'px';
@@ -891,7 +958,7 @@ export function mountThullaTable(container, o) {
     const key = (selected || '') + ':' + cw;
     if (mySlot.dataset.key !== key) {
       mySlot.dataset.key = key;
-      mySlot.replaceChildren(selected ? renderCard(selected, { size: cw, className: 'ghost' }) : h('span.ms-label', 'Your card'));
+      mySlot.replaceChildren(selected ? withDeck(renderCard(selected, { size: cw, className: 'ghost' }), me) : h('span.ms-label', 'Your card'));
     }
   }
 
@@ -1057,6 +1124,7 @@ export function mountThullaTable(container, o) {
       const cw = parseFloat(c.style.getPropertyValue('--cw')) || pileSize();
       const [kx, ky] = planeScale(Number(s.dataset.y) || 0);
       const el = renderCard(c.dataset.card, { size: cw, className: 'flying' });
+      if (c.dataset.deck) el.dataset.deck = c.dataset.deck;
       const x = r.left + r.width / 2, y = r.top + r.height / 2;
       el.style.position = 'fixed'; el.style.left = (x - cw / 2) + 'px'; el.style.top = (y - cw * .7) + 'px';
       const t0 = `scale(${kx},${ky}) rotate(${Number(s.dataset.rot) || 0}deg)`;
@@ -1067,23 +1135,63 @@ export function mountThullaTable(container, o) {
     });
   }
 
+  /**
+   * A cleared baari, in three beats: the cards slide together into a neat stack in
+   * the middle, the stack flips face down, then the cards sail one by one in an arc
+   * onto the discard pile, which ticks and bumps as each one lands.
+   */
   async function animateClear(slots, fast) {
-    if (fast) return;
+    if (fast || !slots.length) return;
     playSound('sweep');
+    discard.hidden = false;
     const fl = liftPile(slots);
+    const pr = pileWrap.getBoundingClientRect();
+    const cx = pr.left + pr.width / 2, cy = pr.top + pr.height / 2;
+    // Aim at the little stack itself (not the label beside it), so cards land exactly on it.
+    const dr = discardStack.getBoundingClientRect();
+    const tx = dr.left + dr.width / 2, ty = dr.top + dr.height / 2;
+    // Every card gets a back, so it can really turn over.
+    fl.forEach(f => f.el.appendChild(h('div.pcard-back', icon('taash-mark', 'mark'))));
+    const at = (f, x, y, flip, rot, k) => `perspective(800px) translate(${x - f.x}px,${y - f.y}px) rotateY(${flip}deg) rotate(${rot}deg) scale(${k})`;
+    const k0 = .9, n = fl.length;
+    const stackXY = i => [cx + (i - (n - 1) / 2) * 1.2, cy - i * 1.6];
+    // 1. Gather.
     await Promise.all(fl.map((f, i) => {
-      const suit = slots[i].firstChild.dataset.card.slice(-1);
-      let dx = 0, dy = -60;
-      const cell = cleared && cleared.cells[suit].cell;
-      if (cell && cell.offsetParent) {
-        const tr = cell.getBoundingClientRect();
-        dx = tr.left + tr.width / 2 - f.x; dy = tr.top + tr.height / 2 - f.y;
-      }
+      const [x, y] = stackXY(i);
+      return animate(f.el, [{ transform: f.t0 }, { transform: at(f, x, y, 0, (i % 3) - 1, k0) }], { duration: 280, delay: i * 35, easing: 'cubic-bezier(.3,.7,.2,1)', fill: 'forwards' });
+    }));
+    if (destroyed) return;
+    // 2. Flip the stack over, lifting it a little.
+    await Promise.all(fl.map((f, i) => {
+      const [x, y] = stackXY(i);
       return animate(f.el, [
-        { transform: f.t0, opacity: 1, filter: 'blur(0)' },
-        { transform: 'translate(0,-10px) ' + f.t0 + ' scale(1.04)', opacity: 1, offset: .25 },
-        { transform: `translate(${dx}px,${dy}px) scale(${cell ? .25 : .7})`, opacity: 0, filter: cell ? 'blur(0)' : 'blur(3px)' },
-      ], { duration: 620, delay: i * 70, easing: 'cubic-bezier(.5,0,.3,1)' }).then(() => f.el.remove());
+        { transform: at(f, x, y, 0, (i % 3) - 1, k0) },
+        { transform: at(f, x, y - 26, 90, 0, k0 * 1.08), offset: .5 },
+        { transform: at(f, x, y, 180, (i % 3) - 1, k0) },
+      ], { duration: 360, delay: i * 25, easing: 'cubic-bezier(.45,0,.3,1)', fill: 'forwards' });
+    }));
+    if (destroyed) return;
+    playSound('deal');
+    // 3. Sail onto the pile, top card first, shrinking steadily all the way until each
+    //    card is exactly the size of the pile's cards, then settle with a small bump.
+    const cw = parseFloat(fl[0].el.style.getPropertyValue('--cw')) || 60;
+    const ks = Math.max(.12, (dr.width || 26) / cw);                   // the pile card's size, as a scale
+    const lerp = (a, b, t) => a + (b - a) * t;
+    await Promise.all(fl.slice().reverse().map((f, j) => {
+      const i = n - 1 - j, [x, y] = stackXY(i);
+      const lift = 50 + j * 3;
+      const pt = t => [lerp(x, tx, t), lerp(y, ty, t) - Math.sin(t * Math.PI) * lift];   // a gentle arc
+      const k = t => lerp(k0, ks, 1 - Math.pow(1 - t, 1.6));                         // shrinks the whole way
+      const spin = (j * 23) % 30 - 15;
+      const frames = [0, .25, .5, .75, .92].map(t => ({ transform: at(f, ...pt(t), 180, lerp((i % 3) - 1, spin, t), k(t)), offset: t }));
+      frames.push({ transform: at(f, tx, ty, 180, 0, ks * .9), offset: .97 });
+      frames.push({ transform: at(f, tx, ty, 180, 0, ks), offset: 1 });
+      return animate(f.el, frames, { duration: 560, delay: j * 75, easing: 'cubic-bezier(.45,.05,.3,1)', fill: 'forwards' }).then(() => {
+        f.el.remove();
+        playSound('deal');
+        discardNum.textContent = String((parseInt(discardNum.textContent, 10) || 0) + 1);   // the count ticks up as each card lands
+        if (!reducedMotion()) animate(discardStack, [{ scale: '1' }, { scale: '1.18' }, { scale: '1' }], { duration: 220, easing: 'cubic-bezier(.34,1.4,.64,1)', fill: 'none' });
+      });
     }));
     playSound('chime');
   }
@@ -1219,7 +1327,7 @@ export function mountThullaTable(container, o) {
       later(() => {
         const mine = seat === me;
         const to = mine ? handEl.getBoundingClientRect() : seatEls[seat].querySelector('.seat-av').getBoundingClientRect();
-        const el = renderCard('back', { size: fw, className: 'flying' });
+        const el = withDeck(renderCard('back', { size: fw, className: 'flying' }), seat);
         el.style.position = 'fixed'; el.style.left = (dr.left - fw / 2) + 'px'; el.style.top = (dr.top - fw * .7) + 'px';
         fx.appendChild(el);
         // The deck thins out as it is dealt.
@@ -1363,7 +1471,7 @@ export function mountThullaTable(container, o) {
       case 'timeout': {
         if (ev.seat === me) {
           dock.classList.remove('timeout'); void dock.offsetWidth; dock.classList.add('timeout');
-          toast('Time’s up — your highest playable card was played.', { icon: 'i-clock', duration: 3600 });
+          toast('Time’s up, so a card was played for you.', { icon: 'i-clock', duration: 3600 });
         }
         break;
       }
@@ -1433,6 +1541,7 @@ export function mountThullaTable(container, o) {
         V.seats = ev.seats;
         V.finishOrder = ev.seats.filter(s => s.finished).sort((a, b) => a.place - b.place).map(s => s.seat);
         if (cleared) cleared.update(!fast);
+        renderDiscard(!fast && !ev.collected);
         flags = Object.fromEntries(Object.entries(flags).map(([k, f]) => [k, { collected: f.collected || 0 }]));
         if (ev.collected) flags[ev.collected.seat] = { collected: ev.collected.cards.length };
         for (const f of ev.finished) celebrateFinish(f.seat, f.place);
@@ -1528,6 +1637,7 @@ export function mountThullaTable(container, o) {
     if (V.phase === 'review' && V.review) showBanner(V.review);
     if (V.reveal) showReveal(V.reveal); else revealEl.hidden = true;
     if (cleared) cleared.update(false);
+    renderDiscard();
     renderSeats(); renderHand(); setLead(); showDeadline();
     const rq = pendingRequest();
     if (rq && rq.to === me && V.deadline && !seatInfo(me).away) askHuman(rq.from, V.deadline.at);
@@ -1537,26 +1647,203 @@ export function mountThullaTable(container, o) {
   /* ------------------------------------------------------------ drawers */
   function openInfo() {
     const rows = settingsSummary(settings).map(r => h('div.kv', h('span.faint', r.label), h('b', r.value)));
+    rows.unshift(h('div.kv', h('span.faint', 'Table design'), h('b', designWhose() || 'Classic baize')));
     const order = h('ol.seat-order', seatsMeta.map((p, i) => h('li', avatar(p, 'sm'), h('span', i === me ? p.name + ' (you)' : p.name), p.isHost ? h('span.chip.chip-gold', icon('i-crown'), 'Host') : null, h('span.faint.num', plural(i === me ? hand.length : seatInfo(i).count, 'card')))));
-    const log = h('ol.baari-log', history.slice().reverse().slice(0, 12).map(b => h('li',
-      h('div.bl-head', h('b', 'Baari ' + b.number), h('span.chip' + (b.kind === 'thulla' ? '.chip-ember' : '.chip-mist'), b.kind === 'thulla' ? 'Thulla → ' + nameOf(b.collector) : 'Cleared')),
-      h('div.card-row', b.plays.map(p => h('div.bl-play', renderCard(p.card, { size: 34, mini: true, className: p.thulla ? 'is-thulla' : '' }), h('span.faint', nameOf(p.seat))))))));
-    // Phones hide these two from the corner, so they live here too.
-    const soundLabel = () => (soundEnabled() ? 'Sound on' : 'Sound off');
-    const rulesItem = h('button.btn.btn-sm', { type: 'button' }, icon('i-book'), 'How to play');
-    const soundItem = h('button.btn.btn-sm', { type: 'button', 'aria-pressed': String(soundEnabled()) }, icon(soundEnabled() ? 'i-sound' : 'i-mute'), h('span', soundLabel()));
-    soundItem.addEventListener('click', () => { const on = toggleSound(); soundItem.setAttribute('aria-pressed', String(on)); soundItem.replaceChildren(icon(on ? 'i-sound' : 'i-mute'), h('span', soundLabel())); });
-    const m = openModal({ drawer: true, eyebrow: 'Table ' + code, title: 'Table info', body: [
-      h('div.row-gap.wrap.info-actions', rulesItem, soundItem),
+    openModal({ drawer: true, eyebrow: 'Table ' + code, title: 'Table info', body: [
       h('div.kv-grid', rows),
       h('h3.sub', 'Seats, anti-clockwise'), order,
-      h('h3.sub', 'Baari log'), history.length ? log : h('p.muted', 'Finished baaris will appear here.'),
     ] });
-    rulesItem.addEventListener('click', () => { m.close(); hooks.openRules(); });
+  }
+
+  /** Every baari so far, newest first. */
+  function openLog() {
+    const log = h('ol.baari-log', history.slice().reverse().map(b => h('li',
+      h('div.bl-head', h('b', 'Baari ' + b.number), h('span.chip' + (b.kind === 'thulla' ? '.chip-ember' : '.chip-mist'), b.kind === 'thulla' ? 'Thulla → ' + nameOf(b.collector) : 'Cleared')),
+      h('div.card-row', b.plays.map(p => h('div.bl-play', withDeck(renderCard(p.card, { size: 34, mini: true, className: p.thulla ? 'is-thulla' : '' }), p.seat), h('span.faint', nameOf(p.seat))))))));
+    openModal({ drawer: true, eyebrow: 'Table ' + code, title: 'Baari log', subtitle: history.length ? plural(history.length, 'baari') + ' played so far' : null,
+      body: [history.length ? log : h('p.muted', 'Finished baaris will appear here.')] });
+  }
+
+  /** Who's at the table (React draws it, so it can offer Add friend). */
+  function playersInfo() {
+    return seatsMeta.map((p, i) => {
+      const st = V ? seatInfo(i) : {};
+      return {
+        id: p.id, name: p.name, handle: p.handle || null, userId: p.userId || null, guest: !!p.guest, bot: p.bot || null, isHost: !!p.isHost,
+        you: i === me, count: i === me ? hand.length : st.count ?? 0, finished: !!st.finished, place: st.place ?? null, away: !!st.away,
+        turn: !!V && V.phase === 'turn' && V.current === i,
+      };
+    });
+  }
+  function openPlayers() { hooks.openPlayers?.(playersInfo()); }
+
+  /** Phones: everything the corner holds on a big screen, in one sheet. */
+  function openMenu() {
+    const playing = !spectating && V && V.phase !== 'over' && !seatInfo(me).finished;
+    const item = (ic, label, fn, cls = '') => h('button.menu-row' + cls, { type: 'button', onclick: () => { m.close(); fn(); } }, icon(ic), h('span', label));
+    const m = openModal({ drawer: true, eyebrow: 'Table ' + code, title: 'Menu', body: [h('div.menu-rows',
+      item('i-book', 'How to play', () => hooks.openRules()),
+      item('i-sliders', 'Table info', openInfo),
+      item('i-list', 'Baari log', openLog),
+      item('i-users', 'Players', openPlayers),
+      item(soundEnabled() ? 'i-sound' : 'i-mute', soundEnabled() ? 'Sound: on' : 'Sound: off', toggleSound),
+      playing ? item('i-wifi-off', seatInfo(me).away ? 'I’m back' : 'Mark me away', toggleAway) : null,
+      playing ? item('i-flag', 'Forfeit the game', forfeit, '.danger') : null,
+      item('i-back', spectating ? 'Stop watching' : 'Leave the game', leave),
+    )] });
+  }
+
+  /** Step away: auto-play takes your turns at once (instead of after three timeouts). */
+  function toggleAway() {
+    if (spectating || !V) return;
+    sendAction({ type: seatInfo(me).away ? 'back' : 'away' });
+  }
+
+  function toggleBoard(open) {
+    board.hidden = !open;
+    boardBtn.setAttribute('aria-expanded', String(open));
+    if (open) { renderMix(); later(() => board.querySelector('button, input')?.focus(), 30); }
+  }
+  const onBoardOutside = e => { if (!board.hidden && !board.contains(e.target) && !boardBtn.contains(e.target)) toggleBoard(false); };
+  document.addEventListener('pointerdown', onBoardOutside);
+  let sounds = [];
+  fetch('/api/sounds', { cache: 'no-store' }).then(r => r.json()).then(j => { sounds = j.sounds || []; renderBoard(); }).catch(() => renderBoard());
+  function renderBoard() {
+    if (destroyed) return;
+    boardWrap.hidden = !sounds.length;
+    boardSounds.replaceChildren(h('p.sb-head', 'Play a sound'), h('div.sb-grid', sounds.map(snd => h('button.sb-play', { type: 'button', onclick: () => { emote(snd.id); toggleBoard(false); } },
+      icon('i-sound'), h('span', snd.label)))));
+    renderMix();
+  }
+
+  // Sound-board volume, on this device only: one slider for all of it, one per player.
+  const volKey = p => 'sb-vol:' + (p.userId ? 'u' + p.userId : 'p' + p.id);
+  const lastSound = new Map();                        // player id → label of the last sound they played
+  let boardVol = storage.get('sb-vol', 85);
+  const playerVol = p => storage.get(volKey(p), 100);
+  const pct = v => v + '%';
+  function volSlider(label, value, onInput) {
+    const out = h('output.sb-val.num', pct(value));
+    const muteBtn = h('button.icon-btn.sb-mute', { type: 'button' });
+    const range = h('input', { type: 'range', min: '0', max: '100', step: '5', value: String(value), 'aria-label': label + ' volume' });
+    let before = value || 100;
+    const show = v => {
+      range.value = String(v); out.textContent = pct(v); range.setAttribute('aria-valuetext', pct(v));
+      range.style.setProperty('--fill', v + '%');
+      muteBtn.replaceChildren(icon(v ? 'i-sound' : 'i-mute'));
+      muteBtn.setAttribute('aria-label', (v ? 'Mute ' : 'Unmute ') + label); muteBtn.title = v ? 'Mute' : 'Unmute';
+    };
+    const set = v => { show(v); onInput(v); };
+    show(value);
+    range.addEventListener('input', () => { const v = +range.value; if (v) before = v; set(v); });
+    muteBtn.addEventListener('click', () => set(+range.value ? 0 : before));
+    return [muteBtn, range, out];
+  }
+  function renderMix() {
+    if (destroyed) return;
+    const people = seatsMeta.map((p, i) => ({ p, i })).filter(({ p, i }) => i !== me && !p.bot);
+    boardMix.replaceChildren(
+      h('p.sb-head', 'Volume', h('span.faint', ' · this device only')),
+      h('div.sb-row.sb-all', h('span.sb-who', h('b', 'All sounds')), ...volSlider('Sound board', boardVol, v => { boardVol = v; storage.set('sb-vol', v); })),
+      ...people.map(({ p }) => h('div.sb-row' + (lastSound.has(p.id) ? '.has-last' : ''), { 'data-player': p.id },
+        h('span.sb-who', avatar(p, 'sm'), h('span.sb-name', h('b', p.name), h('span.sb-last', lastSound.has(p.id) ? '♪ ' + lastSound.get(p.id) : 'No sounds yet'))),
+        ...volSlider(p.name, playerVol(p), v => storage.set(volKey(p), v)))),
+      ...(people.length ? [] : [h('p.sb-empty', 'No other players to adjust.')]),
+    );
+  }
+  const audio = new Map();
+  /** Play a sound-board file at this listener's volume. Respects the sound switch. */
+  function playBoardSound(snd, volume) {
+    if (!soundEnabled() || !snd.url || volume <= 0) return;
+    let a = audio.get(snd.url);
+    if (!a) { a = new Audio(snd.url); a.preload = 'auto'; audio.set(snd.url, a); }
+    try { a.currentTime = 0; a.volume = Math.min(1, volume); a.play().catch(() => {}); } catch { /* audio unavailable */ }
+  }
+  async function emote(sound) {
+    const r = await hooks.emote?.(sound);
+    if (r && r.error) toast(r.error, { icon: 'i-info' });
+  }
+  /** Someone used the sound board: everyone hears it, and it pops up by their seat. */
+  function onEmote(d) {
+    const snd = sounds.find(x => x.id === d.sound)
+      || { id: d.sound, label: labelFor(d.sound), url: '/sounds/' + encodeURIComponent(d.sound) + '.mp3' };
+    const seat = seatsMeta.findIndex(p => p.id === d.from);
+    const p = seatsMeta[seat];
+    const volume = (boardVol / 100) * (p && seat !== me ? playerVol(p) / 100 : 1);
+    playBoardSound(snd, volume);
+    if (seat >= 0) bubble(seat, '♪ ' + snd.label, 'emote', 2200);
+    // Name who played it, and keep it on their row in the mixer.
+    lastSound.set(d.from, snd.label);
+    const row = boardMix.querySelector('.sb-row[data-player="' + CSS.escape(d.from) + '"]');
+    if (row) {
+      row.classList.add('has-last');
+      row.querySelector('.sb-last').textContent = '♪ ' + snd.label;
+      row.classList.remove('is-playing'); void row.offsetWidth; row.classList.add('is-playing');
+    }
+    const who = seat === me ? 'You' : (d.name || (p && p.name) || 'Someone');
+    const muted = !soundEnabled() || volume <= 0;
+    const item = h('div.sb-feed-item' + (muted ? '.is-muted' : ''), p ? avatar(p, 'sm') : null,
+      h('span.sb-feed-text', h('b', who), ' played ', h('b.sb-feed-snd', snd.label)), icon(muted ? 'i-mute' : 'i-sound'));
+    sbFeed.prepend(item);
+    while (sbFeed.children.length > 3) sbFeed.lastChild.remove();
+    later(() => { item.classList.add('is-out'); later(() => item.remove(), 400); }, 3600);
+  }
+
+  async function forfeit() {
+    if (spectating || !V || V.phase === 'over') return;
+    const ok = await confirmDialog({
+      title: 'Forfeit this game?',
+      message: 'The game ends right now. You finish last and lose rating; everyone else shares the win. This can’t be undone.',
+      confirmLabel: 'Forfeit the game', cancelLabel: 'Keep playing', danger: true,
+    });
+    if (!ok || destroyed) return;
+    const r = await hooks.forfeit?.();
+    if (r && r.error) toast(r.error, { icon: 'i-info' });
+  }
+
+  /**
+   * Someone forfeited: the game stops, their seat goes grey and wobbles under a
+   * white flag, a "boo" goes round the table, then everyone sees the results.
+   */
+  let forfeited = false;
+  function onForfeit(d) {
+    if (forfeited || destroyed) return;
+    forfeited = true;
+    queue.length = 0;
+    clearInterval(tick); tick = null;
+    setUrgency(null); closeAnswer(); hideReveal();
+    const seat = d.seat;
+    const el = seatEls[seat];
+    if (el) {
+      el.classList.add('is-forfeit');
+      if (!reducedMotion()) animate(el.querySelector('.seat-av'), [{ rotate: '0deg' }, { rotate: '-18deg', offset: .2 }, { rotate: '14deg', offset: .45 }, { rotate: '-8deg', offset: .7 }, { rotate: '0deg' }], { duration: 900, fill: 'none' });
+      const flag = h('span.forfeit-flag', { 'aria-hidden': 'true' }, '🏳️');
+      el.appendChild(flag);
+    }
+    const card = h('div.over-card.forfeit-card', { role: 'status' },
+      h('span.ff-flag', { 'aria-hidden': 'true' }, '🏳️'),
+      h('h2.display', seat === me ? 'You forfeited' : nameOf(seat) + ' forfeited!'),
+      h('p.muted', seat === me ? 'Everyone else shares the win.' : 'They waved the white flag. Everyone else wins.'));
+    overlay.appendChild(card);
+    animate(card, [{ opacity: 0, transform: 'translate(-50%,-50%) scale(1.6) rotate(-6deg)' }, { opacity: 1, transform: 'translate(-50%,-50%) scale(.95) rotate(2deg)', offset: .6 }, { opacity: 1, transform: 'translate(-50%,-50%) scale(1) rotate(0)' }], { duration: 520, easing: 'cubic-bezier(.2,.9,.3,1.2)', essential: true });
+    const boos = ['Booo!', 'Darr gaya!', 'Bhaag gaya!', 'Shame, shame!', 'Itni jaldi?', 'Uff!'];
+    seatsMeta.forEach((_, i) => { if (i !== seat && i !== me) later(() => bubble(i, boos[(i * 7 + seat) % boos.length], 'laugh', 2200), 200 + i * 160); });
+    if (!reducedMotion()) {
+      for (let k = 0; k < 14; k++) {
+        const t = h('span.boo-bit', { 'aria-hidden': 'true' }, k % 3 ? '👎' : '🍅');
+        const r = el ? el.getBoundingClientRect() : root.getBoundingClientRect();
+        Object.assign(t.style, { left: (r.left + r.width / 2) + 'px', top: (r.top + r.height / 2) + 'px' });
+        fx.appendChild(t);
+        const ang = Math.random() * Math.PI * 2, dist = 60 + Math.random() * 90;
+        animate(t, [{ transform: 'translate(-50%,-50%) scale(.4)', opacity: 0 }, { transform: `translate(calc(-50% + ${Math.cos(ang) * dist}px), calc(-50% + ${Math.sin(ang) * dist}px)) scale(1.2)`, opacity: 1, offset: .5 }, { transform: `translate(calc(-50% + ${Math.cos(ang) * dist * 1.3}px), calc(-50% + ${Math.sin(ang) * dist * 1.3 + 40}px)) scale(.8)`, opacity: 0 }], { duration: 1200 + Math.random() * 500, delay: k * 50 }).then(() => t.remove());
+      }
+    }
+    later(() => hooks.onGameOver?.(), 3200);
   }
 
   async function leave() {
-    const ok = await confirmDialog({ title: 'Leave this game?', message: 'The game goes on without you: your turns will be played automatically. You can come back with the table code.', confirmLabel: 'Leave game', danger: true });
+    if (spectating) { hooks.leave(); return; }
+    const ok = await confirmDialog({ title: 'Leave this game?', message: 'The game goes on without you: your turns are played automatically and your result still counts. Come back with the table code any time. To give up instead, use Forfeit.', confirmLabel: 'Leave game', danger: true });
     if (ok) hooks.leave();
   }
 
@@ -1585,13 +1872,14 @@ export function mountThullaTable(container, o) {
     ro.disconnect(); playsRo.disconnect();
     wideQuery.removeEventListener('change', onWide);
     document.removeEventListener('pointerdown', onDocDown);
+    document.removeEventListener('pointerdown', onBoardOutside);
     fx.replaceChildren();
     root.remove();
     document.body.classList.remove('in-game');
   }
 
   return {
-    el: root, chatHost, pushEvents, pushHand, resync: applySnapshot, destroy, chatBubble,
+    el: root, chatHost, pushEvents, pushHand, resync: applySnapshot, destroy, chatBubble, emote: onEmote, forfeit: onForfeit, playersInfo,
     setUnread(k) { chatDot.hidden = !k; chatDot.textContent = k; },
     setDeadline(dl, now) { if (!V) return; clockOffset = now - Date.now(); V.deadline = { ...(V.deadline || {}), ...dl }; showDeadline(); },
     get lastSeq() { return lastSeq; },

@@ -10,7 +10,8 @@ import { Modal } from './Modal';
 import { Icon } from './Icon';
 import { Avatar } from './Avatar';
 import { TableOptions, defaultOptions } from './TableOptions';
-import { useViewer } from './Providers';
+import { useViewer, useCurrentTable } from './Providers';
+import Link from 'next/link';
 import { clientGames } from '@/games/client-registry';
 import { gameMeta } from '@/games/catalog';
 import { call, resetSocket } from '@/lib/client/socket';
@@ -19,6 +20,9 @@ import { toast } from '@/lib/client/toast';
 
 export function CreateTableButton({ gameId = 'thulla', className = 'btn btn-primary', children = 'Create table', autoFocus, visibility }) {
   const [open, setOpen] = useState(false);
+  const current = useCurrentTable();
+  // One table at a time: someone already at a table goes back to it instead.
+  if (current) return <Link className={className} href={'/t/' + current.code} title={'You’re at table ' + current.code + '. Leave it to start a new one.'}>{current.status === 'playing' ? 'Return to your game' : 'Return to table ' + current.code}</Link>;
   return (
     <>
       <button type="button" className={className} data-autofocus={autoFocus ? true : undefined} onClick={() => setOpen(true)}>{children}</button>

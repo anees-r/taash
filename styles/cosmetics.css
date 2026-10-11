@@ -1,0 +1,122 @@
+/* Cosmetics (lib/cosmetics/catalog.js). Each design only overrides variables the
+   table and cards are already drawn with:
+     felt:  --baize-700/800/900, --rail-700, --felt-pattern
+     backs: --back-1, --back-2, --back-pattern   (also a player's face-down hand)
+     faces: --paper, --paper-2, --face-pattern, --face-sheen, --card-black, --card-red, --face-edge
+   Every card design has a matching table design. Both are defined once below
+   (--d-1/--d-2 colours, --d-motif pattern, --d-w/--d-h tile size), so a table
+   is exactly its card back laid across the felt. */
+
+:root {
+  --m-lattice: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'%3E%3Cg fill='none' stroke='%23d6b06a' stroke-opacity='.45' stroke-width='.7'%3E%3Cpath d='M10 1.5l2 6.5 6.5 2-6.5 2-2 6.5-2-6.5L1.5 10 8 8z'/%3E%3Ccircle cx='0' cy='0' r='3'/%3E%3Ccircle cx='20' cy='0' r='3'/%3E%3Ccircle cx='0' cy='20' r='3'/%3E%3Ccircle cx='20' cy='20' r='3'/%3E%3C/g%3E%3C/svg%3E");
+  --m-stars: radial-gradient(1.2px 1.2px at 20% 30%, #fff, transparent), radial-gradient(1px 1px at 70% 20%, #fff, transparent), radial-gradient(1.4px 1.4px at 40% 70%, #ead197, transparent), radial-gradient(1px 1px at 85% 80%, #fff, transparent), radial-gradient(1px 1px at 10% 85%, #b8a9d8, transparent);
+  --m-chequer: repeating-conic-gradient(rgba(255,243,207,.16) 0 25%, transparent 0 50%);
+  --m-kite: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='30'%3E%3Cpath d='M12 2l7 9-7 9-7-9z' fill='%23ffd23f' fill-opacity='.55'/%3E%3Cpath d='M12 20q2 4-1 8' fill='none' stroke='%23ff4f6d' stroke-opacity='.6'/%3E%3C/svg%3E");
+  --m-paisley: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28'%3E%3Cpath d='M10 20c-6 0-7-8-2-11 4-2 9 1 7 6-1 3-5 3-5 0' fill='none' stroke='%23ead197' stroke-opacity='.6' stroke-width='1.2'/%3E%3Ccircle cx='21' cy='7' r='1.6' fill='%23ead197' fill-opacity='.5'/%3E%3C/svg%3E");
+  --m-truck: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='26'%3E%3Ccircle cx='13' cy='13' r='5' fill='%23ffd23f' fill-opacity='.7'/%3E%3Ccircle cx='13' cy='13' r='2' fill='%23ff4fa3'/%3E%3Ccircle cx='0' cy='0' r='4' fill='%2344e0ff' fill-opacity='.6'/%3E%3Ccircle cx='26' cy='26' r='4' fill='%2344e0ff' fill-opacity='.6'/%3E%3C/svg%3E");
+  --m-mughal: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Cg fill='none' stroke='%23d6b06a' stroke-opacity='.4'%3E%3Crect x='12' y='12' width='16' height='16'/%3E%3Crect x='12' y='12' width='16' height='16' transform='rotate(45 20 20)'/%3E%3Ccircle cx='20' cy='20' r='3'/%3E%3C/g%3E%3C/svg%3E");
+  --m-silver: repeating-linear-gradient(135deg, rgba(255,255,255,.18) 0 1px, transparent 1px 6px);
+  --m-diamond: conic-gradient(from 45deg, rgba(255,255,255,.25), rgba(170,220,255,.1), rgba(220,190,255,.25), rgba(255,255,255,.1), rgba(255,255,255,.25));
+}
+
+/* ---------- The designs: one definition, used by the card back and the table ---------- */
+[data-deck], [data-table] { --d-motif: var(--m-lattice); --d-w: 11; --d-h: 11; }     /* the classic back's lattice */
+[data-deck="indigo"], [data-table="indigo"] { --d-1: #1c2a6b; --d-2: #3349a8; }
+[data-deck="rose"], [data-table="rose"] { --d-1: #6b1c3f; --d-2: #b03a6c; }
+[data-deck="jade"], [data-table="jade"] { --d-1: #0f4a3a; --d-2: #1f7a5c; }
+[data-deck="chequer"], [data-table="chequer"] { --d-1: #4a1d1d; --d-2: #7a2e2e; --d-motif: var(--m-chequer); --d-w: 16; --d-h: 16; }
+[data-deck="noir"], [data-table="noir"] { --d-1: #121216; --d-2: #2c2c34; --d-motif: var(--m-silver); --d-w: 12; --d-h: 12; }
+[data-deck="kite"], [data-table="kite"] { --d-1: #13406b; --d-2: #2a76b8; --d-motif: var(--m-kite); --d-w: 22; --d-h: 27; }
+[data-deck="paisley"], [data-table="paisley"] { --d-1: #5a1424; --d-2: #8c2638; --d-motif: var(--m-paisley); --d-w: 22; --d-h: 22; }
+[data-deck="truck"], [data-table="truck"] { --d-1: #b8202f; --d-2: #1d7a70; --d-motif: var(--m-truck); --d-w: 20; --d-h: 20; }
+[data-deck="galaxy"], [data-table="galaxy"] { --d-1: #0b0b24; --d-2: #2a1659; --d-motif: var(--m-stars); --d-w: 60; --d-h: 60; }
+[data-deck="silver"], [data-table="silver"] { --d-1: #3a3f4a; --d-2: #6b7280; --d-motif: var(--m-silver); --d-w: 12; --d-h: 12; }
+[data-deck="gilded"], [data-table="gilded"] { --d-1: #5a3f0e; --d-2: #a7802e; --d-motif: var(--m-mughal); --d-w: 26; --d-h: 26; }
+[data-deck="royal"], [data-table="royal"] { --d-1: #4a0d1c; --d-2: #8c1d33; }
+[data-deck="diamond"], [data-table="diamond"] { --d-1: #1b2a4a; --d-2: #5a7fb0; --d-motif: var(--m-diamond); --d-w: 40; --d-h: 40; }
+
+/* The card back (everyone sees your face-down hand)… */
+[data-deck] {
+  --back-1: var(--d-1, #2c1e48); --back-2: var(--d-2, #43306b);
+  --back-pattern: var(--d-motif) center / calc(var(--d-w) * 1cqw) calc(var(--d-h) * 1cqw);
+}
+/* …and the same back across the table: colours, pattern, cream-and-gold border, medallion. */
+[data-table] {
+  --baize-700: var(--d-2, #0f3a31); --baize-800: color-mix(in srgb, var(--d-2, #0b2c26), var(--d-1, #0b2c26)); --baize-900: var(--d-1, #071d19);
+  --rail-700: color-mix(in srgb, var(--d-1, #2b1c35) 65%, #000);
+  --felt-pattern: var(--d-motif) center / calc(var(--d-w) * 2.6px) calc(var(--d-h) * 2.6px);
+}
+.tt[data-table] .tt-felt {
+  background:
+    radial-gradient(40% 30% at 50% 50%, rgba(214,176,106,.18), transparent 70%),      /* the back's glow around the medallion */
+    var(--felt-pattern),
+    radial-gradient(ellipse at 50% 40%, rgba(255,255,255,.07), transparent 60%),
+    linear-gradient(150deg, var(--d-2), var(--d-1));
+  box-shadow:
+    inset 0 0 0 var(--rail, 18px) var(--rail-700),
+    inset 0 0 0 calc(var(--rail, 18px) + 5px) #f5ecd8,                                   /* the card's cream border… */
+    inset 0 0 0 calc(var(--rail, 18px) + 7px) rgba(168,130,60,.9),                       /* …its gold line… */
+    inset 0 0 0 calc(var(--rail, 18px) + 14px) var(--d-1),                               /* …and the dark band inside */
+    inset 0 30px 80px rgba(0,0,0,.45),
+    0 50px 90px rgba(0,0,0,.6), 0 0 0 1px rgba(0,0,0,.4);
+}
+.tt[data-table] .felt-inlay { border-color: rgba(234,209,151,.3); }
+/* The medallion in the middle of every back */
+.tt[data-table] .felt-emblem::before {
+  content: ""; position: absolute; z-index: -1; left: 50%; top: calc(var(--emb, 120px) / 2);
+  width: calc(var(--emb, 120px) * .82); height: calc(var(--emb, 120px) * .82);
+  transform: translate(-50%, -50%) rotate(45deg);
+  border: calc(var(--emb, 120px) * .03) solid rgba(214,176,106,.85); border-radius: calc(var(--emb, 120px) * .09);
+  background: radial-gradient(circle, #4b3675, #2c1e48);
+  box-shadow: 0 0 0 calc(var(--emb, 120px) * .04) rgba(44,30,72,.9), 0 0 0 calc(var(--emb, 120px) * .055) rgba(214,176,106,.5);
+}
+.tt[data-table] .felt-emblem svg { fill: var(--gold-300); transform: scale(.66); }
+
+/* ---------- …and the front (everyone sees every card you play) ---------- */
+[data-deck="indigo"] { --paper: #f4f6ff; --paper-2: #dfe5fb; --face-edge: #3349a8; }
+[data-deck="rose"] { --paper: #fff5f8; --paper-2: #f7dce6; --face-edge: #b03a6c; }
+[data-deck="jade"] { --paper: #f2fbf6; --paper-2: #d8efe3; --face-edge: #1f7a5c; }
+[data-deck="chequer"] { --paper: #fffaf0; --paper-2: #f3e3cf; --face-edge: #7a2e2e;
+  --face-pattern: repeating-conic-gradient(rgba(122,46,46,.06) 0 25%, transparent 0 50%) center / 18cqw 18cqw; }
+[data-deck="kite"] { --paper: #f3f9ff; --paper-2: #dcebf9; --face-edge: #2a76b8;
+  --face-pattern: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='30'%3E%3Cpath d='M12 2l7 9-7 9-7-9z' fill='%232a76b8' fill-opacity='.07'/%3E%3C/svg%3E") center / 30cqw 37cqw; }
+[data-deck="paisley"] { --paper: #fff8ee; --paper-2: #f2dfc4; --face-edge: #8c2638;
+  --face-pattern: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28'%3E%3Cpath d='M10 20c-6 0-7-8-2-11 4-2 9 1 7 6-1 3-5 3-5 0' fill='none' stroke='%238c2638' stroke-opacity='.1' stroke-width='1.2'/%3E%3C/svg%3E") center / 30cqw 30cqw; }
+[data-deck="truck"] { --paper: #fffdf3; --paper-2: #f6ecc8; --face-edge: #b8202f;
+  --face-pattern: linear-gradient(90deg, #b8202f 0 4cqw, #ffd23f 4cqw 6cqw, transparent 6cqw calc(100% - 6cqw), #ffd23f calc(100% - 6cqw) calc(100% - 4cqw), #1d7a70 calc(100% - 4cqw)); }
+[data-deck="silver"] { --paper: #fbfcfe; --paper-2: #e4e8ee; --face-edge: #8a93a3; --face-pattern: repeating-linear-gradient(135deg, rgba(60,70,90,.04) 0 1px, transparent 1px 6px); }
+[data-deck="gilded"] { --paper: #fffaeb; --paper-2: #f3e2b4; --face-edge: #d6b06a; --face-sheen: rgba(255,240,200,.9); }
+[data-deck="royal"] { --paper: #fffaf2; --paper-2: #f1e3cc; --face-edge: #8c1d33; }
+[data-deck="diamond"] { --paper: #fbfdff; --paper-2: #e3ecfb; --face-edge: #7fb7e8;
+  --face-pattern: conic-gradient(from 45deg at 50% 50%, rgba(170,220,255,.12), rgba(220,190,255,.12), rgba(255,255,255,0), rgba(170,220,255,.12)); }
+/* Dark decks: light ink on a dark face. */
+[data-deck="noir"] { --paper: #24242c; --paper-2: #121216; --face-edge: #9aa0ad; --face-sheen: rgba(255,255,255,.08); --card-black: #f2f2f5; --card-red: #ff7a8a; }
+[data-deck="galaxy"] { --paper: #1c1840; --paper-2: #0b0b24; --face-edge: #8f7dff; --face-sheen: rgba(170,150,255,.15); --card-black: #f4f1ff; --card-red: #ff8fb0;
+  --face-pattern: var(--m-stars) center / 60cqw 60cqw; }
+[data-deck="noir"] .pcard-face::before, [data-deck="galaxy"] .pcard-face::before { opacity: 0; }   /* no paper grain on dark cards */
+
+/* The frame: every card a player lays down carries their design's edge. */
+[data-deck] .pcard-face { box-shadow: var(--sh-card), inset 0 0 0 2px var(--face-edge, var(--back-2)), inset 0 0 0 3.5px rgba(255,255,255,.55); }
+[data-deck="gilded"] .pcard-face { box-shadow: var(--sh-card), inset 0 0 0 2px #d6b06a, inset 0 0 0 3.5px #fff3cf, 0 0 10px rgba(214,176,106,.35); }
+[data-deck="royal"] .pcard-face { box-shadow: var(--sh-card), inset 0 0 0 2px #8c1d33, inset 0 0 0 3.5px #ead197; }
+[data-deck="diamond"] .pcard-face { box-shadow: var(--sh-card), inset 0 0 0 2px #9fd8ff, inset 0 0 0 3.5px #fff, 0 0 12px rgba(159,216,255,.4); }
+[data-deck="gilded"] .pcard-back, [data-deck="royal"] .pcard-back, [data-deck="diamond"] .pcard-back { box-shadow: var(--sh-card), inset 0 0 0 3.5cqw #fff3cf, inset 0 0 0 4.4cqw #d6b06a, inset 0 0 0 6cqw var(--back-1); }
+
+/* ---------- Shop previews ---------- */
+.felt-preview { position: relative; width: 100%; aspect-ratio: 16 / 10; border-radius: 50%;
+  background: var(--felt-pattern, linear-gradient(transparent, transparent)), radial-gradient(ellipse at 50% 42%, var(--baize-700), var(--baize-800) 55%, var(--baize-900) 92%);
+  box-shadow: inset 0 0 0 8px var(--rail-700), inset 0 0 0 9px rgba(214,176,106,.45), inset 0 0 0 11px var(--rail-700), 0 10px 24px rgba(0,0,0,.4); }
+.felt-preview[data-table] {
+  --felt-pattern: var(--d-motif) center / calc(var(--d-w) * 1.2px) calc(var(--d-h) * 1.2px);
+  background: radial-gradient(40% 30% at 50% 50%, rgba(214,176,106,.18), transparent 70%), var(--felt-pattern), linear-gradient(150deg, var(--d-2), var(--d-1));
+  box-shadow: inset 0 0 0 7px var(--rail-700), inset 0 0 0 10px #f5ecd8, inset 0 0 0 11px rgba(168,130,60,.9), inset 0 0 0 15px var(--d-1), 0 10px 24px rgba(0,0,0,.4); }
+.felt-preview[data-table]::after {
+  content: ""; position: absolute; left: 50%; top: 50%; width: 16%; aspect-ratio: 1;
+  transform: translate(-50%, -50%) rotate(45deg); border: 2px solid rgba(214,176,106,.85); border-radius: 4px;
+  background: radial-gradient(circle, #4b3675, #2c1e48); box-shadow: 0 0 0 2px rgba(44,30,72,.9), 0 0 0 3px rgba(214,176,106,.5); }
+/* Picture cards on dark decks: a dark cartouche so the light ink stays readable. */
+[data-deck="noir"] .court, [data-deck="galaxy"] .court {
+  background: linear-gradient(180deg, transparent 49.6%, rgba(234,209,151,.45) 49.6%, rgba(234,209,151,.45) 50.4%, transparent 50.4%), linear-gradient(180deg, #34343f, #1d1d26);
+  box-shadow: inset 0 0 0 1.4cqw rgba(255,255,255,.06), inset 0 0 0 1.9cqw rgba(234,209,151,.35);
+}
+[data-deck="galaxy"] .court { background: linear-gradient(180deg, transparent 49.6%, rgba(170,150,255,.5) 49.6%, rgba(170,150,255,.5) 50.4%, transparent 50.4%), linear-gradient(180deg, #2a2360, #141238); }

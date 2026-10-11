@@ -488,3 +488,81 @@ h3.sub { font-size: var(--fs-sm); font-weight: 800; letter-spacing: .08em; text-
 .seat-card.is-bot { border-style: dashed; }
 .sent-icon { width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center; background: rgba(214,176,106,.14); color: var(--gold-300); }
 .sent-icon svg { width: 22px; height: 22px; }
+
+/* ---------- Table invites: a card that drops in and glows until answered ---------- */
+.invite-pops { position: fixed; z-index: 120; left: 50%; top: calc(14px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); display: grid; gap: 10px; width: min(94vw, 460px); }
+.invite-pop {
+  position: relative; overflow: hidden; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px 14px; align-items: center;
+  padding: 16px 16px 18px; border-radius: var(--r-lg);
+  background: linear-gradient(160deg, #2a1f45, #1a1430); border: 2px solid var(--gold-400);
+  box-shadow: 0 0 0 4px rgba(214,176,106,.18), 0 18px 50px rgba(0,0,0,.6), 0 0 40px rgba(214,176,106,.35);
+  animation: inviteIn .55s var(--ease-spring) both, inviteGlow 1.8s ease-in-out .6s infinite;
+}
+.ip-glow { position: absolute; inset: -40%; background: conic-gradient(from 0deg, transparent, rgba(214,176,106,.18), transparent 30%); animation: ringSpin 3.2s linear infinite; pointer-events: none; }
+.invite-pop > :not(.ip-glow):not(.ip-timer) { position: relative; }
+.ip-text { display: grid; gap: 2px; min-width: 0; }
+.ip-text b { font-size: 1.05rem; line-height: 1.25; }
+.ip-actions { grid-column: 1 / -1; display: flex; gap: 8px; }
+.ip-actions .btn-primary { flex: 1; }
+.ip-timer { position: absolute; left: 0; bottom: 0; height: 3px; width: 100%; background: var(--gold-400); transform-origin: left; animation: ipTimer linear forwards; }
+@keyframes inviteIn { from { opacity: 0; transform: translateY(-40px) scale(.9); } }
+@keyframes inviteGlow { 50% { box-shadow: 0 0 0 7px rgba(214,176,106,.12), 0 18px 50px rgba(0,0,0,.6), 0 0 60px rgba(214,176,106,.55); } }
+@keyframes ipTimer { to { transform: scaleX(0); } }
+@media (prefers-reduced-motion: reduce) { .invite-pop, .ip-glow { animation: none; } }
+
+/* ---------- You're already at a table ---------- */
+.current-table { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: var(--sp-3) auto 0; width: min(1200px, calc(100% - 2 * var(--sp-4))); padding: 10px 14px; border-radius: var(--r-md); background: rgba(214,176,106,.1); border: 1px solid rgba(214,176,106,.45); font-size: var(--fs-sm); }
+.current-table .btn { margin-left: auto; }
+.ct-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--gold-400); flex: none; }
+.current-table.live .ct-dot { background: var(--mist-300); animation: livePulse 2s ease-out infinite; }
+
+/* ---------- Coins, friends, shame ---------- */
+.coin { display: inline-block; width: 14px; height: 14px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff3cf, #d6b06a 55%, #9a7430); box-shadow: inset 0 0 0 1.5px rgba(90,60,10,.5); vertical-align: -2px; flex: none; }
+.coin-gain { display: inline-flex; align-items: center; gap: 5px; margin-left: 10px; font-weight: 800; color: var(--gold-300); }
+.chip-shame { color: #ffd3c2; border-color: rgba(240,122,82,.6); background: rgba(240,122,82,.14); }
+.friend-sent { font-size: 11px; }
+.add-friend { white-space: nowrap; }
+.lb-person .lb-add { width: 30px; height: 30px; margin-left: 4px; }
+.shame-card { border-color: rgba(240,122,82,.55); background: linear-gradient(160deg, rgba(240,122,82,.12), rgba(18,14,31,.6)); }
+.shame-flag { font-size: 44px; line-height: 1; animation: flagWave 1.6s ease-in-out infinite; transform-origin: bottom left; }
+@keyframes flagWave { 50% { transform: rotate(-8deg); } }
+
+/* ---------- Spectators in the lobby ---------- */
+.spectators-panel { margin-top: var(--sp-4); display: grid; gap: 10px; }
+.spec-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.spec-list li { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--r-md); background: rgba(12,9,21,.35); border: 1px solid var(--line); }
+.spec-list li.is-me { border-color: rgba(214,176,106,.45); }
+.spec-name { flex: 1; min-width: 0; font-weight: 700; font-size: var(--fs-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---------- Shop & rank rewards ---------- */
+.wallet { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: var(--r-pill); background: rgba(214,176,106,.12); border: 1px solid rgba(214,176,106,.45); font-size: 1.15rem; }
+.wallet .coin { width: 20px; height: 20px; }
+.shop-tabs { margin: var(--sp-4) 0; }
+.shop-section { margin-top: var(--sp-5); display: grid; gap: 10px; }
+.shop-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+.shop-item { display: grid; gap: 10px; align-content: start; justify-items: start; padding: 14px; border-radius: var(--r-lg); background: var(--surface-1); border: 1px solid var(--line); }
+.shop-item.is-on { border-color: var(--gold-400); box-shadow: 0 0 0 1px rgba(214,176,106,.35), 0 0 22px rgba(214,176,106,.15); }
+.shop-item.is-locked > :first-child { filter: grayscale(.7) brightness(.75); }
+.shop-item > :first-child { justify-self: stretch; display: grid; place-items: center; min-height: 92px; }
+.si-text { display: grid; gap: 2px; }
+.si-text .small { display: inline-flex; align-items: center; gap: 4px; }
+.deck-preview { display: flex !important; gap: 8px; justify-content: center; }
+.rank-card { display: grid; gap: 14px; margin-bottom: var(--sp-3); }
+.rank-peak { font-size: 2.6rem; line-height: 1; margin: 2px 0; color: var(--gold-300); }
+.tier-track { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 6px; }
+.tier-track li { display: grid; gap: 2px; padding: 8px 10px; border-radius: var(--r-md); border: 1px solid var(--line); background: rgba(12,9,21,.35); font-size: var(--fs-xs); }
+.tier-track li.done { border-color: rgba(214,176,106,.55); background: rgba(214,176,106,.1); color: var(--gold-300); }
+@keyframes ringSpin { to { transform: rotate(1turn); } }
+/* Seat cards: rows keep their natural size when a neighbour is taller; extra controls sit in one compact row. */
+.seat-card { align-content: start; }
+.seat-tags { align-items: center; }
+.seat-tags .chip { height: auto; }
+.seat-extra { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+.seat-extra .btn { min-height: 30px; padding: 0 10px; font-size: var(--fs-xs); }
+
+/* Chat spam protection: a countdown until you can post again */
+.chat-warn { display: flex; align-items: center; gap: 6px; margin: 0 10px 6px; padding: 6px 10px; border-radius: var(--r-md); font-size: var(--fs-xs); font-weight: 600; color: #ffc2ad; background: rgba(240,122,82,.1); border: 1px solid rgba(240,122,82,.35); }
+.chat-warn svg { width: 14px; height: 14px; flex: none; }
+.chat-warn.is-wait { color: var(--gold-300); background: rgba(214,176,106,.1); border-color: rgba(214,176,106,.4); }
+.chat-send:disabled { opacity: .7; cursor: not-allowed; }
+.chat-wait { font-weight: 800; font-size: var(--fs-sm); color: var(--gold-300); }

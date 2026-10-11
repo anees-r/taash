@@ -5,10 +5,13 @@ import { Icon } from './Icon';
 import { Avatar } from './Avatar';
 import { Modal, Confirm } from './Modal';
 import { Chat } from './Chat';
+import { AddFriendButton } from './AddFriendButton';
+import { EditSettings } from './LobbyView';
 import { PlayingCard } from '@/components/game/PlayingCard';
 import { gameMeta } from '@/games/catalog';
 import { call } from '@/lib/client/socket';
 import { toast } from '@/lib/client/toast';
+import { playFile } from '@/lib/client/sound';
 import { ordinal, plural, firstName } from '@/lib/client/format';
 
 const loserLines = [
@@ -22,19 +25,23 @@ export function ResultsView({ table, result, you, viewerKind, chat, onBackToLobb
   const meta = gameMeta(table.gameId);
   const isHost = table.hostId === you;
   const [managing, setManaging] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const pageRef = useRef(null);
-  const ordered = result.players.slice().sort((a, b) => a.place - b.place);
-  const finishers = ordered.filter(p => !p.isLoser);
+  const ordered = result.players.slice().sort((a, b) => a.place - b.place || a.seat - b.seat);
+  const quitter = result.forfeit ? result.players.find(p => p.forfeit) : null;
+  const finishers = ordered.filter(p => !p.isLoser && !p.forfeit);
   const loser = ordered.find(p => p.isLoser) || null;
   const mine = result.players.find(p => p.id === you);
   const myRating = result.ratings ? result.ratings[you] : null;
+  const myCoins = result.coins ? result.coins[you] : null;
   const s = result.summary;
   const nameIn = p => (p.id === you ? 'You' : p.name);
   const bySeat = seat => result.players.find(p => p.seat === seat);
   const ranked = result.ranked !== false;
   const deltaOf = p => (result.ratings && result.ratings[p.id] ? result.ratings[p.id].delta : null);
-  const leftChip = p => (p.forfeit ? <span className="chip chip-ember" title="Left before the game ended: ranked last and loses rating">Left</span> : null);
+  const person = id => [...table.players, ...(table.spectators || [])].find(x => x.id === id);
+  const shame = p => (p.forfeit ? <span className="chip chip-shame" title="Forfeited: ranked last, lost rating">🏳️ Forfeited</span> : null);
 
   useEffect(() => {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches || !pageRef.current) return;
@@ -52,6 +59,15 @@ export function ResultsView({ table, result, you, viewerKind, chat, onBackToLobb
     return () => { clearTimeout(t); layer.remove(); };
   }, [result.matchId]);
 
+  // Victory for everyone who got rid of their cards, defeat for whoever was left holding them
+  // (or forfeited). Players only, once per game: a reload of the results stays quiet.
+  useEffect(() => {
+    if (!mine) return;
+    const key = 'taash:end-sound:' + result.matchId;
+    try { if (sessionStorage.getItem(key)) return; sessionStorage.setItem(key, '1'); } catch { /* storage unavailable */ }
+    playFile('/sounds/' + (mine.isLoser || mine.forfeit ? 'defeat' : 'victory') + '.mp3');
+  }, [result.matchId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   async function playAgain() {
     setBusy(true);
     let extra = {};
@@ -62,18 +78,17 @@ export function ResultsView({ table, result, you, viewerKind, chat, onBackToLobb
   }
 
   const winner = finishers[0];
+  const sharedWin = !!quitter && finishers.filter(p => p.place === 1).length > 1;
   return (
     <main ref={pageRef} className="page results-page screen-enter">
       <div className="results-head">
         <p className="eyebrow">{meta.name} · table {table.code} · game {result.gameNo}</p>
-        <h1 className="page-title">{winner ? (winner.id === you ? 'You finished first!' : firstName(winner.name) + ' finished first') : 'Game over'}</h1>
-        {result.everyoneLeft ? <p className="muted">Everyone left, so the game ended there. Everyone who left while holding cards forfeits and loses rating.</p>
-          : result.endedEarly ? <p className="muted">The game ended early because everyone else left. Players who left forfeit.</p> : null}
+        <h1 className="page-title">{quitter ? (quitter.id === you ? 'You forfeited the game' : firstName(quitter.name) + ' forfeited. Everyone else wins!') : winner ? (winner.id === you ? 'You finished first!' : firstName(winner.name) + ' finished first') : 'Game over'}</h1>
       </div>
       <div className="results-grid">
         <div className="results-main">
-          <ol className="podium" aria-label="Top finishers">{finishers.slice(0, 3).map(p => (
-            <li key={p.id} className={'pod p' + p.place}>
+          <ol className="podium" aria-label="Top finishers">{finishers.slice(0, sharedWin ? 6 : 3).map(p => (
+            <li key={p.id} className={'pod p' + Math.min(p.place, 3)}>
               <div className="pod-medal display">{ordinal(p.place)}</div>
               <Avatar person={p} size={p.place === 1 ? 'xl' : 'lg'} />
               <b>{nameIn(p)}</b>
@@ -81,8 +96,17 @@ export function ResultsView({ table, result, you, viewerKind, chat, onBackToLobb
               <div className="pod-step" aria-hidden="true" />
             </li>
           ))}</ol>
-          {finishers.length > 3 ? <ol className="rest-list" start={4}>{finishers.slice(3).map(p => <li key={p.id}><span className="num rank">{ordinal(p.place)}</span><Avatar person={p} size="sm" /><span>{nameIn(p)}</span>{leftChip(p)}</li>)}</ol> : null}
-          {loser ? (
+          {!sharedWin && finishers.length > 3 ? <ol className="rest-list" start={4}>{finishers.slice(3).map(p => <li key={p.id}><span className="num rank">{ordinal(p.place)}</span><Avatar person={p} size="sm" /><span>{nameIn(p)}</span></li>)}</ol> : null}
+          {quitter ? (
+            <section className="loser-card shame-card">
+              <div className="shame-flag" aria-hidden="true">🏳️</div>
+              <div>
+                <span className="eyebrow">Forfeited</span>
+                <p className="lc-line"><b>{nameIn(quitter)}</b> {quitter.id === you ? 'gave up the game. Everyone else shares the win.' : 'waved the white flag. Everyone else shares the win.'}</p>
+                <span className="faint num">Walked away with {plural(quitter.stats.cardsLeft || 0, 'card')} still in hand</span>
+              </div>
+            </section>
+          ) : loser ? (
             <section className="loser-card">
               <div className="lc-cards" aria-hidden="true">{[0, 1, 2].map(i => <span key={i} style={{ '--i': i }}><PlayingCard card="back" size={54} /></span>)}</div>
               <div>
@@ -91,13 +115,14 @@ export function ResultsView({ table, result, you, viewerKind, chat, onBackToLobb
                 <span className="faint num">Finished the game with {plural(loser.stats.cardsLeft || 0, 'card')} in hand</span>
               </div>
             </section>
-          ) : <section className="loser-card"><p>{result.endedEarly ? (result.everyoneLeft ? 'Nobody is left holding the cards: the game stopped when everyone left.' : 'Nobody is left holding the cards: the game stopped when everyone else left.') : 'Everyone emptied their hand together — nobody is left holding the cards.'}</p></section>}
-          {!ranked ? <div className="rating-change"><Icon id="i-info" /><span className="faint">Unranked game: nobody’s rating changed.</span></div>
+          ) : <section className="loser-card"><p>Everyone emptied their hand together — nobody is left holding the cards.</p></section>}
+          {!ranked ? <div className="rating-change"><Icon id="i-info" /><span className="faint">Unranked game: ratings and coins don’t change.</span></div>
           : mine && viewerKind === 'user' ? (
             <div className="rating-change"><Icon id="i-trophy" />
               {myRating ? <span>Thulla rating <b className="num">{myRating.after}</b> <span className={'delta num ' + (myRating.delta >= 0 ? 'up' : 'down')}>{(myRating.delta >= 0 ? '+' : '') + myRating.delta}</span></span> : <span className="faint">Updating your rating…</span>}
+              {myCoins ? <span className="coin-gain num"><span className="coin" aria-hidden="true" />+{myCoins} coins</span> : null}
             </div>
-          ) : <div className="rating-change"><Icon id="i-info" /><span className="faint">Guest games are not rated. Create an account to keep a rating.</span></div>}
+          ) : mine ? <div className="rating-change"><Icon id="i-info" /><span className="faint">Guests aren’t rated and don’t earn coins. Create an account to keep both.</span></div> : null}
           <section className="panel panel-pad"><h2 className="section-title">How the game went</h2>
             <dl className="summary-grid">
               <div><dt>Baaris played</dt><dd className="num">{s.baaris}</dd></div>
@@ -109,22 +134,34 @@ export function ResultsView({ table, result, you, viewerKind, chat, onBackToLobb
             </dl>
           </section>
           <section className="result-actions">
-            <p className="muted">{isHost ? 'You are the host. Start a rematch with everyone at the table, or free up a seat first.' : 'Waiting for the host to start the next game.'}</p>
+            <p className="muted">{isHost ? 'You’re the host. Start a rematch, change the table settings, or take everyone back to the lobby.' : 'Waiting for the host to start the next game or go back to the lobby.'}</p>
             <div className="row-gap wrap">
               <button type="button" className="btn btn-primary btn-lg" disabled={!isHost || busy || table.players.length < 2} onClick={playAgain}>Play again</button>
+              {isHost ? <button type="button" className="btn btn-lg" onClick={() => setEditing(true)}><Icon id="i-sliders" />Table settings</button> : null}
               <button type="button" className="btn btn-lg" disabled={!isHost} onClick={() => setManaging(true)}><Icon id="i-users" />Manage players</button>
-              <button type="button" className="btn btn-lg btn-ghost" onClick={onBackToLobby}>Back to lobby</button>
+              <button type="button" className="btn btn-lg btn-ghost" onClick={onBackToLobby}>{isHost ? 'Everyone back to the lobby' : 'View the lobby'}</button>
             </div>
           </section>
         </div>
         <aside className="results-side">
           <section className="panel panel-pad"><h2 className="section-title">Finishing order</h2>
-            <ol className="order-list">{ordered.map(p => <li key={p.id} className={p.isLoser || p.forfeit ? 'lost' : undefined}><span className="num rank">{ordinal(p.place)}</span><Avatar person={p} size="sm" /><span>{nameIn(p)}</span>{p.isLoser ? <span className="chip">Holding the cards</span> : null}{leftChip(p)}{deltaOf(p) != null ? <span className={'delta num ' + (deltaOf(p) >= 0 ? 'up' : 'down')}>{(deltaOf(p) >= 0 ? '+' : '') + deltaOf(p)}</span> : null}</li>)}</ol>
+            <ol className="order-list">{ordered.map(p => {
+              const who = person(p.id);
+              return (
+                <li key={p.id} className={p.isLoser || p.forfeit ? 'lost' : undefined}>
+                  <span className="num rank">{ordinal(p.place)}</span><Avatar person={p} size="sm" /><span>{nameIn(p)}</span>
+                  {p.isLoser ? <span className="chip">Holding the cards</span> : null}{shame(p)}
+                  {deltaOf(p) != null ? <span className={'delta num ' + (deltaOf(p) >= 0 ? 'up' : 'down')}>{(deltaOf(p) >= 0 ? '+' : '') + deltaOf(p)}</span> : null}
+                  {p.id !== you && who?.handle ? <AddFriendButton handle={who.handle} userId={who.userId} compact className="icon-btn" /> : null}
+                </li>
+              );
+            })}</ol>
           </section>
           <section className="panel lobby-chat"><Chat code={table.code} messages={chat} you={you} idSuffix="results" /></section>
         </aside>
       </div>
       {managing ? <ManagePlayers table={table} you={you} onClose={() => setManaging(false)} onRemoved={onBackToLobby} /> : null}
+      {editing ? <EditSettings table={table} onClose={() => setEditing(false)} /> : null}
     </main>
   );
 }

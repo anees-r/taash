@@ -4,6 +4,7 @@ import '@/styles/cards.css';
 import '@/styles/screens.css';
 import '@/styles/table.css';
 import '@/styles/app.css';
+import '@/styles/cosmetics.css';
 import { Sprite } from '@/components/platform/Sprite';
 import { Providers } from '@/components/platform/Providers';
 import { getViewer } from '@/lib/auth/viewer';

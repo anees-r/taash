@@ -8,6 +8,7 @@ import { Modal, Confirm } from './Modal';
 import { Crumbs, Segmented, Note } from './controls';
 import { Chat } from './Chat';
 import { TableOptions, OptionChips, defaultOptions } from './TableOptions';
+import { AddFriendButton } from './AddFriendButton';
 import { BOT_BY_ID } from '@/games/thulla/bots';
 import { PERSONALITIES } from '@/games/thulla/engine/strategy';
 import { Guide } from '@/games/thulla/client/Guide';
@@ -24,6 +25,9 @@ export function LobbyView({ table, you, viewerKind, chat, appUrl, onLeft, onShow
   const isHost = table.hostId === you;
   const host = table.players.find(p => p.id === table.hostId);
   const me = table.players.find(p => p.id === you);
+  const watchingMe = (table.spectators || []).find(p => p.id === you);
+  const spectators = table.spectators || [];
+  const specMax = table.options?.spectators ?? 0;
   const seats = table.settings.players;
   const nonHostNotReady = table.players.filter(p => p.id !== table.hostId && !p.ready);
   const canStart = isHost && table.players.length >= 2 && nonHostNotReady.length === 0;
@@ -88,6 +92,11 @@ export function LobbyView({ table, you, viewerKind, chat, appUrl, onLeft, onShow
         <Avatar person={p} size="lg" status={p.connected ? 'on' : 'away'} />
         <b className="seat-pname">{isMe ? p.name + ' (you)' : p.name}</b>
         <div className="seat-tags"><span className="chip">{p.guest ? 'Guest' : 'Member'}</span><span className={'chip st-' + st.c}><Icon id={st.ic} />{st.t}</span></div>
+        <div className="seat-extra">
+          {!isMe && p.handle ? <AddFriendButton handle={p.handle} userId={p.userId} /> : null}
+          {isHost && !isHostP && specMax > spectators.length ? <button type="button" className="btn btn-sm btn-ghost" disabled={busy} onClick={() => act('table:move', { playerId: p.id, to: 'spectator' }, p.name + ' is now watching')}>Move to spectators</button> : null}
+          {isMe && !isHostP && specMax > spectators.length ? <button type="button" className="btn btn-sm btn-ghost" disabled={busy} onClick={() => act('table:move', { playerId: p.id, to: 'spectator' }, 'You’re watching now')}>Watch instead</button> : null}
+        </div>
         {isHost && !isHostP ? <button type="button" className="icon-btn seat-x" aria-label={'Remove ' + p.name + ' from the table'} title="Remove from table" onClick={() => setKick(p)}><Icon id="i-x" /></button> : null}
       </li>);
   }
@@ -98,7 +107,7 @@ export function LobbyView({ table, you, viewerKind, chat, appUrl, onLeft, onShow
         <div className="lh-left">
           <Crumbs items={[{ label: 'Games', href: '/' }, { label: meta.name, href: '/games/' + meta.id }, { label: 'Lobby' }]} />
           <h1 className="page-title">{meta.name} table</h1>
-          <div className="row-gap lobby-chips"><OptionChips options={table.options} /></div>
+          <div className="row-gap lobby-chips"><OptionChips options={table.options} />{isHost ? <button type="button" className="btn btn-sm" onClick={() => setEditing(true)}><Icon id="i-sliders" />Table settings</button> : null}</div>
           <p className="muted">Hosted by <b className="host-name">{isHost ? 'you' : host?.name}</b> · <span className="seat-sum num">{table.players.length} of {seats} seats taken</span></p>
         </div>
         <div className="code-card">
@@ -122,11 +131,28 @@ export function LobbyView({ table, you, viewerKind, chat, appUrl, onLeft, onShow
             {table.players.some(p => p.bot) ? <p className="hint">Bots follow the rules and remember every card played. They never see anyone’s hand.</p> : null}
             <ol className="seat-grid" aria-label="Seats">{grid}</ol>
           </section>
+          {specMax || spectators.length ? (
+            <section className="panel panel-pad spectators-panel">
+              <div className="section-head row"><h2 className="section-title">Watching</h2><span className="chip num">{spectators.length} of {specMax}</span></div>
+              {spectators.length ? (
+                <ul className="spec-list">{spectators.map(w => (
+                  <li key={w.id} className={w.id === you ? 'is-me' : undefined}>
+                    <Avatar person={w} size="sm" status={w.connected ? 'on' : 'away'} />
+                    <span className="spec-name">{w.id === you ? w.name + ' (you)' : w.name}{w.guest ? <span className="faint small"> · guest</span> : null}</span>
+                    {w.id !== you && w.handle ? <AddFriendButton handle={w.handle} userId={w.userId} compact className="icon-btn" /> : null}
+                    {isHost || w.id === you ? <button type="button" className="btn btn-sm" disabled={busy || table.players.length >= seats} title={table.players.length >= seats ? 'Every seat is taken' : undefined} onClick={() => act('table:move', { playerId: w.id, to: 'player' }, w.id === you ? 'You took a seat' : w.name + ' took a seat')}>{w.id === you ? 'Take a seat' : 'Give a seat'}</button> : null}
+                    {isHost ? <button type="button" className="icon-btn" aria-label={'Remove ' + w.name} title="Remove" onClick={() => act('table:kick', { playerId: w.id }, w.name + ' was removed')}><Icon id="i-x" /></button> : null}
+                  </li>
+                ))}</ul>
+              ) : <p className="muted small">Nobody is watching. Up to {specMax} people can watch: they see every card played, never anyone’s hand.</p>}
+            </section>
+          ) : null}
           <section className="start-panel">
             <div><p className={'start-note' + (canStart ? ' ok' : '')} aria-live="polite">{note}</p></div>
             <div className="row-gap">
               <button type="button" className="btn btn-ghost" onClick={() => setLeaving(true)}>Leave table</button>
               {table.status === 'finished' ? <button type="button" className="btn" onClick={onShowResults}>Last results</button> : null}
+              {watchingMe ? <span className="chip chip-mist">You’re watching{table.players.length < seats ? '. Take a free seat from the Watching list.' : ''}</span> : null}
               {!isHost && me ? <button type="button" className={'btn' + (me.ready ? '' : ' btn-primary')} disabled={busy} onClick={() => act('table:ready', { ready: !me.ready })}><Icon id={me.ready ? 'i-check' : 'i-clock'} />{me.ready ? 'Ready' : 'I’m ready'}</button> : null}
               {isHost ? <button type="button" className="btn btn-primary btn-lg" disabled={!canStart || busy} onClick={() => act('table:start', testDeal())}>Start game</button> : null}
             </div>
@@ -138,6 +164,9 @@ export function LobbyView({ table, you, viewerKind, chat, appUrl, onLeft, onShow
             <div className="kv-grid">
               <div className="kv"><span className="faint">Rating</span><b>{table.options?.ranked === false ? 'Unranked — ratings don’t change' : 'Ranked'}</b></div>
               <div className="kv"><span className="faint">Who can join</span><b>{table.options?.visibility === 'public' ? 'Public — listed in Open rooms' : 'Private — code or invite'}</b></div>
+              <div className="kv"><span className="faint">Table design</span><b>{table.cosmetics?.table ? table.cosmetics.table.name + ' (' + (table.cosmetics.table.byId === you ? 'yours' : firstName(table.cosmetics.table.by) + '’s') + ')' : 'Classic baize'}</b></div>
+              <div className="kv"><span className="faint">Guests</span><b>{table.options?.allowGuests === false ? 'Accounts only' : 'Welcome'}</b></div>
+              <div className="kv"><span className="faint">Spectators</span><b>{specMax ? 'Up to ' + specMax : 'None'}</b></div>
               {game.settingsSummary(table.settings).map(r => <div key={r.label} className="kv"><span className="faint">{r.label}</span><b>{r.value}</b></div>)}
             </div>
             <button type="button" className="btn btn-sm btn-ghost" onClick={() => setRules(true)}><Icon id="i-book" />How to play</button>
@@ -163,7 +192,7 @@ function testDeal() {
   try { const k = Number(sessionStorage.getItem('taash:e2eCards')); return k ? { testCardsEach: k } : {}; } catch { return {}; }
 }
 
-function EditSettings({ table, onClose }) {
+export function EditSettings({ table, onClose }) {
   const game = clientGames[table.gameId];
   const [s, setS] = useState({ ...table.settings });
   const [o, setO] = useState({ ...defaultOptions(), ...table.options });
@@ -178,7 +207,7 @@ function EditSettings({ table, onClose }) {
   return (
     <Modal open onClose={onClose} wide eyebrow={'Table ' + table.code} title="Table settings"
       footer={<><button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button><button type="button" className="btn btn-primary" disabled={!valid} onClick={save}>Save settings</button></>}>
-      <TableOptions value={o} onChange={next => { setO(next); setErr(null); }} />
+      <TableOptions value={o} onChange={next => { setO(next); setErr(null); }} guestHost={!!table.players.find(p => p.id === table.hostId)?.guest} minSpectators={(table.spectators || []).length} />
       <game.SettingsForm value={s} minPlayers={table.players.length} onChange={(next, ok) => { setS(next); setValid(ok); setErr(null); }} />
       {err ? <p className="error" role="alert" style={{ color: 'var(--rose-300)', fontSize: 'var(--fs-xs)', fontWeight: 600 }}>{err}</p> : null}
     </Modal>

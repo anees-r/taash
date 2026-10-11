@@ -35,20 +35,29 @@ When a turn's time runs out (or the player is away or has left), the server play
 
 **Three consecutive turn timeouts** mark the player **away**. Away players' turns are played automatically after a short pause (1.2 s, so others can follow), and requests sent to them are kept. Playing a card, answering a request, or pressing **I'm back** clears away. Leaving a game mid-way marks the player away immediately. Their seat stays, so the game always finishes.
 
-## Leaving a game
+## Leaving, forfeiting and away
 
-- **One player leaves while holding cards:** they **forfeit**. The game goes on (their turns are auto-played), they rank below everyone who stayed, and they take the largest rating loss (see Ratings). Players who stayed are scored on how they played, as usual.
-- **Dropping off counts as leaving** if the player is still disconnected 30 s after the game ends. Coming back before the end (opening the table again) cancels the forfeit.
-- **Leaving after going out** (no cards left) is not a forfeit.
-- **Only one player still in:** the clock pauses for 20 s. If nobody comes back, the game ends early: the remaining player finishes ahead of the leavers and nobody is "left holding the cards".
-- **Everyone leaves** (including the last player during that pause): the game ends there and **everyone who left while holding cards forfeits** and loses rating.
-- **Everyone disconnects** without leaving: the clock pauses instead of auto-playing to an empty room. It resumes when someone returns. After 10 minutes with nobody back, the game ends with everyone still holding cards forfeiting, and the table closes.
+- **Leaving or disconnecting never ends the game.** The player's turns are auto-played and they finish wherever the cards put them; their result counts like anyone else's (they can win or lose).
+- **Forfeit** (a button on the table, confirmed in a dialog) is the only way to end a game early. The game stops at once: the forfeiter is last and loses rating; players who had already gone out keep their places; everyone else shares the next place. The table sees a white flag, a grey seat and a round of boos.
+- **Away:** a player can mark themselves away from the table's corner (or the Table info drawer on phones). Auto-play takes their turns straight away instead of after three missed turns; **I'm back** returns control.
+- **Everyone disconnects:** the clock pauses instead of auto-playing to an empty room, and resumes when someone returns. If nobody is back within 10 minutes, the rest of the game is auto-played to its normal end, saved, and the table closes.
+- **One table at a time:** a person is seated at or watching at most one table. Creating or joining another is refused with a link back; the home screen shows a "Return to your table" banner and the Create button becomes "Return to table".
 
 ## Table options
 
-- **Ranked / unranked** (default ranked). Unranked games are saved to history but never change ratings, streaks or leaderboard counts.
-- **Public / private** (default private). Public tables with a free seat are listed under **Open rooms** (home, Thulla and Join pages, refreshed every 5 s) for anyone to join. Private tables are joined by code, link or invite.
-- The host can change both in the lobby; they are locked during a game.
+- **Ranked / unranked** (default ranked). Unranked games are saved to history but never change ratings, coins, streaks or leaderboard counts. Bots are allowed only at unranked tables.
+- **Public / private** (default private). Public tables with a free seat (or room to watch) are listed under **Open rooms** (home, Thulla and Join pages, refreshed every 5 s). Private tables are joined by code, link or invite.
+- **Allow guests** (default on): a host with an account can make the table accounts-only. A guest host always allows guests.
+- **Spectators** (0–20, default 4): watchers see every card played and the public table state, never a hand. They can watch a full table or a game in progress. Between games the host can move anyone between seats and spectators, and anyone can move themselves (Watch instead / Take a seat).
+- The host can change every option and setting in the lobby, and from the results screen between games; they are locked during a game.
+
+## Sound board
+
+- Sounds are the MP3 files in `public/sounds`: `drum-roll.mp3` shows as "Drum Roll". The list is re-read every few seconds; the server only relays sounds that exist. With no files, the sound-board button is hidden.
+- Everyone at the table hears a sound (sound is **on by default**; the switch is remembered per device) and it pops up by the player's seat. Players only, one sound every 2.5 s each.
+- **Who played what:** each sound also shows "Name played Sound" in a short feed (bottom left on wide screens, under the top bar on smaller ones), and the player's row in the mixer keeps their last sound.
+- **End of game:** on the results screen players hear `public/sounds/victory.mp3` if they got rid of their cards, `defeat.mp3` if they were left holding them or forfeited. Once per game (a reload stays quiet), spectators hear nothing, and the sound switch applies. These two files are kept off the sound board.
+- **Volume mixer** (in the sound-board popover, spectators included): one slider for all sounds plus one per other player, each with a mute button. Settings are personal and stay on that device (remembered per account, or per seat for guests); they never change what anyone else hears.
 
 ## Bots
 
@@ -62,16 +71,23 @@ When a turn's time runs out (or the player is away or has left), the server play
 - **Personalities:** Bashir Chacha (cautious), Rani Apa (sharp), Pappu (reckless: sometimes forgets who is out of a shape, takes bigger risks) and Nano (steady). They "think" for about a second before playing.
 - **Chat:** each bot has hand-written lines for the start of a game, giving Thulla, picking up a pile, going out and losing, and answers a hello. At most one line per bot every few seconds.
 
-## Ratings and streaks
+## Ratings, coins and streaks
 
-- **Method:** pairwise Elo across the finishing order, weighted by margin. Each registered player is compared with every other player in the game: finishing ahead scores 1, behind 0. Expected score is `1 / (1 + 10^((Rb − Ra) / 400))`. Each pair is weighted by `1 + gap`, where `gap` is how many baaris apart the two finished as a share of the whole game (a player still holding cards counts as finishing in the last baari). The delta is `round(K / (n − 1) × Σ weight × (score − expected))` with K = 32. Everyone starts at 1500.
-- **Going out early pays:** finishing in the same baari as someone is a plain win (×1); going out at the very start while they hold cards to the end counts double (×2). Both sides of a pair use the same weight, so it stays zero-sum.
-- **Forfeits:** a player who left loses every pair at the full ×2 weight, against everyone (other leavers included, so a table that all walks out all goes down: −32 at equal ratings). Players who stayed beat a leaver as an ordinary win, weighted by how early they went out. A forfeit also counts as a loss for streaks.
-- **Unranked games** change nothing.
-- **Guests** count as 1500-rated opponents and are never rated.
-- With equal ratings at a 4-player table where everyone goes out in the same baari, the results are +16, +5, −5 and −16. Wider margins move up to twice as much.
-- **Winning streak** = consecutive 1st places; **losing streak** = consecutive games left holding the cards.
-- **Exactly once:** keyed by the match id (chosen at game start) and the `rating_events (match_id, user_id)` primary key, inside one transaction. The client never sends results or ratings.
+- **Method:** pairwise Elo across the finishing order, weighted by margin. Each registered player is compared with every other player: finishing ahead scores 1, behind 0, expected score `1 / (1 + 10^((Rb − Ra) / 400))`. Each pair is weighted by `1 + gap`, where `gap` is how many baaris apart the two finished as a share of the game (a player still holding cards counts as finishing in the last baari). The delta is `round(K / (n − 1) × Σ weight × (score − expected))` with K = 32. Everyone starts at 1500.
+- **Only the player left holding the cards loses points.** Everyone who went out gains at least +1, even when the maths alone would take a little away (e.g. 3rd of 4 at equal ratings: +1 instead of −5). With equal ratings at 4 players, all out in the same baari: +16, +5, +1, −16.
+- **Going out early pays:** finishing in the same baari as someone is a plain win (×1); going out at the very start while they hold cards to the end counts double (×2).
+- **Forfeits:** the forfeiter loses as if beaten by everyone at ×1.5 (−24 at equal ratings); every other player gets the same +6, whatever their place.
+- **Coins** (ranked games only, accounts only, paid once per match): 1st 40, 2nd 30, 3rd 20, then 10; 5 for holding the cards; after a forfeit everyone else gets 15 and the forfeiter 0.
+- **Unranked games** change nothing. **Guests** count as 1500-rated opponents and are never rated or paid.
+- **Winning streak** = consecutive 1st places; **losing streak** = consecutive games left holding the cards (a forfeit counts).
+- **Exactly once:** keyed by the match id (chosen at game start), the `rating_events (match_id, user_id)` primary key and the `coin_events (match_id, user_id)` unique index, inside one transaction. The client never sends results, ratings or coins.
+
+## Shop and rank rewards
+
+- **Shop:** table designs and card designs bought with coins (`lib/cosmetics/catalog.js`). **Rank rewards** unlock with a player's peak Thulla rating (1550 Rising … 1900 Legend) and can never be bought.
+- **Everyone sees them:** a card design has a back (on the player's face-down hand, seen by everyone) and a front (paper, watermark, frame and ink on every card they play), so whose card is whose is easy to see. Table designs are card-back motifs across the felt.
+- **Whose table:** of the table designs the seated players own, the most prestigious is used: rank rewards first (highest rank), then shop tables by price; the host wins ties. The game shows it as e.g. "Truck art · Ali's table", and the lobby and Table info say whose it is.
+- Equipped items are re-checked whenever they are read, so a design can't be shown by someone who no longer qualifies.
 
 ## Edge cases covered by tests
 

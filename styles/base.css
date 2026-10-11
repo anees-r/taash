@@ -319,3 +319,6 @@ input[type="range"] { width: 100%; accent-color: var(--gold-400); }
 .site-footer a { color: var(--fg-muted); font-weight: 700; text-decoration: none; }
 .site-footer a:hover { color: var(--gold-300); text-decoration: underline; text-underline-offset: 3px; }
 .sf-dot { opacity: .5; }
+/* Coin balance in the top bar */
+.coin-pill { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 12px; border-radius: var(--r-pill); border: 1px solid rgba(214,176,106,.45); background: rgba(214,176,106,.1); color: var(--gold-300); font-weight: 800; font-size: var(--fs-sm); text-decoration: none; }
+.coin-pill:hover { background: rgba(214,176,106,.2); }
